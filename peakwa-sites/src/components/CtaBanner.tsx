@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Phone } from 'lucide-react';
 import type { GeneratedSite } from '@/src/lib/types';
-import { getTextColor, resolveTheme } from '@/src/lib/theme';
+import { getAccessibleForeground, getTextColor, resolveTheme } from '@/src/lib/theme';
 import { SectionWrapper } from './SectionWrapper';
 
 type CtaBannerProps = {
@@ -14,6 +14,7 @@ type CtaBannerProps = {
 export function CtaBanner({ site, heading, subtext, buttonText = 'Contact Us' }: CtaBannerProps) {
   const theme = resolveTheme(site);
   const textColor = getTextColor(theme.primaryColor);
+  const primaryOnWhite = getAccessibleForeground(theme.primaryColor, '#FFFFFF');
 
   return (
     <SectionWrapper background={theme.primaryColor} className="py-16 md:py-16">
@@ -24,7 +25,7 @@ export function CtaBanner({ site, heading, subtext, buttonText = 'Contact Us' }:
           <Link
             href={`/${site.slug}/contact`}
             className="rounded-full px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
-            style={{ backgroundColor: '#fff', color: theme.primaryColor }}
+            style={{ backgroundColor: '#fff', color: primaryOnWhite }}
           >
             {buttonText}
           </Link>

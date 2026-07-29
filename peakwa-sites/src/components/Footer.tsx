@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Mail, MapPin, Phone } from 'lucide-react';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
-import { getTextColor } from '@/src/lib/theme';
+import { getMutedTextOnBackground, getTextColor } from '@/src/lib/theme';
 
 type FooterProps = {
   site: GeneratedSite;
@@ -68,31 +68,20 @@ function SocialIconButton({
   const className =
     'flex h-10 w-10 items-center justify-center rounded-full shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-lg';
 
-  if (href) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={label}
-        title={label}
-        className={className}
-        style={{ backgroundColor: accentColor, color: accentText }}
-      >
-        {icon}
-      </a>
-    );
-  }
+  if (!href) return null;
 
   return (
-    <span
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
       aria-label={label}
       title={label}
       className={className}
       style={{ backgroundColor: accentColor, color: accentText }}
     >
       {icon}
-    </span>
+    </a>
   );
 }
 
@@ -117,9 +106,10 @@ function IconBadge({
 
 export function Footer({ site, theme }: FooterProps) {
   const textColor = getTextColor(theme.primaryColor);
+  const mutedText = getMutedTextOnBackground(theme.primaryColor);
   const accentText = getTextColor(theme.accentColor);
   const base = `/${site.slug}`;
-  const socialLinks = buildSocialLinks(site);
+  const socialLinks = buildSocialLinks(site).filter((link) => Boolean(link.href));
 
   return (
     <footer
@@ -132,10 +122,11 @@ export function Footer({ site, theme }: FooterProps) {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-3 lg:px-8">
         <div>
           <p className="text-xl font-bold">{site.businessName}</p>
-          <p className="mt-3 max-w-sm text-sm leading-relaxed opacity-80">
+          <p className="mt-3 max-w-sm text-sm leading-relaxed" style={{ color: mutedText }}>
             Trusted {site.industry} professionals serving {site.city}, {site.state} and
             surrounding communities.
           </p>
+          {socialLinks.length > 0 ? (
           <div className="mt-6 flex flex-wrap gap-3">
             {socialLinks.map((link) => (
               <SocialIconButton
@@ -146,10 +137,14 @@ export function Footer({ site, theme }: FooterProps) {
               />
             ))}
           </div>
+          ) : null}
         </div>
 
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wide opacity-70">
+          <p
+            className="mb-4 text-sm font-semibold uppercase tracking-wide"
+            style={{ color: mutedText }}
+          >
             Quick Links
           </p>
           <ul className="space-y-2.5 text-sm">
@@ -170,7 +165,10 @@ export function Footer({ site, theme }: FooterProps) {
         </div>
 
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wide opacity-70">
+          <p
+            className="mb-4 text-sm font-semibold uppercase tracking-wide"
+            style={{ color: mutedText }}
+          >
             Contact
           </p>
           <ul className="space-y-4 text-sm">
@@ -210,20 +208,20 @@ export function Footer({ site, theme }: FooterProps) {
       </div>
 
       <div
-        className="border-t border-white/10 py-5 text-center text-xs opacity-70"
-        style={{ color: textColor }}
+        className="border-t border-white/10 py-5 text-center text-xs"
+        style={{ color: mutedText }}
       >
         © {new Date().getFullYear()} {site.businessName}. All rights reserved.
       </div>
 
-      <p className="pb-5 text-center text-gray-400" style={{ fontSize: '12px' }}>
+      <p className="pb-5 text-center text-xs" style={{ color: mutedText }}>
         Powered by{' '}
         <a
           href="https://peakwa.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="transition hover:opacity-80"
-          style={{ color: theme.accentColor }}
+          className="font-semibold underline underline-offset-2 transition hover:opacity-90"
+          style={{ color: textColor }}
         >
           Peakwa
         </a>

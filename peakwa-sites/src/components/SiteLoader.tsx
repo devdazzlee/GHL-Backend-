@@ -38,7 +38,7 @@ export function SiteLoader({
   const [phase, setPhase] = useState<'visible' | 'hiding' | 'done'>('visible');
 
   useEffect(() => {
-    const MIN_MS = 700;
+    const MIN_MS = 400;
     const MAX_MS = 2500;
     const FADE_MS = 500;
     const start = performance.now();

@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import { contentImageSrc } from '@/src/lib/images';
 
 type SiteImageProps = {
   src: string;
@@ -32,12 +33,13 @@ export function SiteImage({
     return <>{fallback ?? null}</>;
   }
 
+  const optimizedSrc = contentImageSrc(src, sizes);
+
   const sharedProps = {
-    src,
+    src: optimizedSrc,
     alt,
     className,
     priority,
-    unoptimized: true,
     referrerPolicy: 'no-referrer' as const,
     onError: () => setError(true),
   };

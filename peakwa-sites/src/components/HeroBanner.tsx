@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { SiteImage } from '@/src/components/SiteImage';
+import { LcpHeroImage } from '@/src/components/LcpHeroImage';
 import type { GeneratedSite } from '@/src/lib/types';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 
@@ -28,18 +28,9 @@ export function HeroBanner({ site, heroImage, title, subtitle, children }: HeroB
       {heroImage ? (
         <>
           <div className="absolute inset-0">
-            <SiteImage
+            <LcpHeroImage
               src={heroImage}
               alt={`${site.businessName} hero banner`}
-              fill
-              className="object-cover"
-              priority
-              fallback={
-                <div
-                  className="h-full w-full"
-                  style={{ backgroundColor: theme.primaryColor }}
-                />
-              }
             />
           </div>
           <div

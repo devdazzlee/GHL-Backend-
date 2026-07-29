@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { BreadcrumbListSchema } from '@/src/components/SchemaMarkup';
 import type { GeneratedSite } from '@/src/lib/types';
-import { resolveTheme } from '@/src/lib/theme';
+import { getAccessibleForeground, resolveTheme } from '@/src/lib/theme';
 
 type BreadcrumbsProps = {
   site: GeneratedSite;
@@ -10,6 +10,7 @@ type BreadcrumbsProps = {
 
 export function Breadcrumbs({ site, items }: BreadcrumbsProps) {
   const theme = resolveTheme(site);
+  const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
   const base = `/${site.slug}`;
 
   return (
@@ -18,7 +19,7 @@ export function Breadcrumbs({ site, items }: BreadcrumbsProps) {
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-gray-500">
       <ol className="flex flex-wrap items-center gap-2">
         <li>
-          <Link href={base} style={{ color: theme.accentColor }} className="hover:underline">
+          <Link href={base} style={{ color: accentOnWhite }} className="hover:underline">
             Home
           </Link>
         </li>
@@ -26,7 +27,7 @@ export function Breadcrumbs({ site, items }: BreadcrumbsProps) {
           <li key={`${item.label}-${i}`} className="flex items-center gap-2">
             <span aria-hidden>&gt;</span>
             {item.href ? (
-              <Link href={item.href} style={{ color: theme.accentColor }} className="hover:underline">
+              <Link href={item.href} style={{ color: accentOnWhite }} className="hover:underline">
                 {item.label}
               </Link>
             ) : (

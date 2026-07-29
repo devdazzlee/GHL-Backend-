@@ -5,19 +5,19 @@ import './globals.css';
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin'],
-  display: 'swap',
+  display: 'optional',
 });
 
 const playfair = Playfair_Display({
   variable: '--font-playfair',
   subsets: ['latin'],
-  display: 'swap',
+  display: 'optional',
 });
 
 const nunito = Nunito({
   variable: '--font-nunito',
   subsets: ['latin'],
-  display: 'swap',
+  display: 'optional',
 });
 
 export const metadata: Metadata = {

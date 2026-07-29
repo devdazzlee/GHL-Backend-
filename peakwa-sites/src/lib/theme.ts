@@ -17,8 +17,56 @@ export function isLightColor(hex: string): boolean {
   return luminance > 0.5;
 }
 
+function relativeLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  const channel = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+export function contrastRatio(fgHex: string, bgHex: string): number {
+  const l1 = relativeLuminance(fgHex);
+  const l2 = relativeLuminance(bgHex);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 export function getTextColor(bgHex: string): string {
-  return isLightColor(bgHex) ? '#111827' : '#FFFFFF';
+  const whiteRatio = contrastRatio('#FFFFFF', bgHex);
+  const darkRatio = contrastRatio('#111827', bgHex);
+  return whiteRatio >= darkRatio ? '#FFFFFF' : '#111827';
+}
+
+/** Darkens a brand accent until it meets WCAG AA contrast on the given background. */
+export function getAccessibleForeground(
+  fgHex: string,
+  bgHex: string,
+  minRatio = 4.5,
+): string {
+  if (contrastRatio(fgHex, bgHex) >= minRatio) return fgHex;
+  let candidate = fgHex;
+  for (let i = 0; i < 48; i++) {
+    candidate = darkenHex(candidate, 0.06);
+    if (contrastRatio(candidate, bgHex) >= minRatio) return candidate;
+  }
+  const fallback = getTextColor(bgHex);
+  return contrastRatio(fallback, bgHex) >= minRatio ? fallback : '#111827';
+}
+
+/** Secondary/muted text on a solid brand background (no opacity hacks). */
+export function getMutedTextOnBackground(bgHex: string, minRatio = 4.5): string {
+  const primary = getTextColor(bgHex);
+  const candidates =
+    primary === '#FFFFFF'
+      ? ['#F3F4F6', '#E5E7EB', '#FFFFFF']
+      : ['#374151', '#1F2937', '#111827'];
+  for (const hex of candidates) {
+    if (contrastRatio(hex, bgHex) >= minRatio) return hex;
+  }
+  return primary;
 }
 
 export function darkenHex(hex: string, amount = 0.15): string {

@@ -5,13 +5,14 @@ import { buildPageMetadata } from '@/src/lib/seo';
 import { ArrowRight, ChevronDown, MapPin, Phone, Quote, Star } from 'lucide-react';
 import { CtaBanner } from '@/src/components/CtaBanner';
 import { FAQSchema, LocalBusinessSchema, WebSiteSchema } from '@/src/components/SchemaMarkup';
+import { LcpHeroImage } from '@/src/components/LcpHeroImage';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
-import { darkenHex, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { darkenHex, getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -193,6 +194,8 @@ export default async function HomePage({ params }: PageProps) {
   const locations = await getLocationPages(slug);
   const content = parseJson<HomeContent>(site.homeContent, {});
   const theme = resolveTheme(site);
+  const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
+  const accentOnSecondary = getAccessibleForeground(theme.accentColor, theme.secondaryColor);
   const hero = content.hero ?? {};
   const about = content.about ?? {};
   const services = content.services ?? [];
@@ -251,16 +254,9 @@ export default async function HomePage({ params }: PageProps) {
         {images.hero ? (
           <>
             <div className="absolute inset-0">
-              <SiteImage
+              <LcpHeroImage
                 src={images.hero}
                 alt={`${site.businessName} hero background`}
-                fill
-                className="object-cover"
-                priority
-                sizes="100vw"
-                fallback={
-                  <div className="h-full w-full" style={{ background: heroBg }} />
-                }
               />
             </div>
             <div
@@ -327,7 +323,7 @@ export default async function HomePage({ params }: PageProps) {
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
                 style={{
                   backgroundColor: colorWithOpacity(theme.accentColor, 0.12),
-                  color: theme.accentColor,
+                  color: accentOnWhite,
                 }}
               >
                 {getIcon(badge.icon, 'w-6 h-6')}
@@ -449,7 +445,7 @@ export default async function HomePage({ params }: PageProps) {
                           className="flex h-full items-center justify-center"
                           style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.2) }}
                         >
-                          <span style={{ color: theme.accentColor }}>
+                          <span style={{ color: accentOnWhite }}>
                             {getIcon(service.icon || 'wrench', 'w-8 h-8')}
                           </span>
                         </div>
@@ -461,7 +457,7 @@ export default async function HomePage({ params }: PageProps) {
                     className="flex h-20 items-center justify-center"
                     style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.2) }}
                   >
-                    <span style={{ color: theme.accentColor }}>
+                    <span style={{ color: accentOnWhite }}>
                       {getIcon(service.icon || 'wrench', 'w-8 h-8')}
                     </span>
                   </div>
@@ -472,8 +468,8 @@ export default async function HomePage({ params }: PageProps) {
                   </h3>
                   <p className="mt-3 flex-1 text-gray-600">{service.description}</p>
                   <span
-                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold"
-                    style={{ color: theme.accentColor }}
+                    className="mt-5 inline-flex items-center gap-2 text-sm font-semibold underline decoration-2 underline-offset-2"
+                    style={{ color: accentOnWhite }}
                   >
                     Learn More <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                   </span>
@@ -486,7 +482,7 @@ export default async function HomePage({ params }: PageProps) {
           <Link
             href={`/${slug}/services`}
             className="inline-flex items-center justify-center gap-2 rounded-full border-2 px-8 py-3 text-sm font-semibold transition hover:opacity-80"
-            style={{ borderColor: theme.accentColor, color: theme.accentColor }}
+            style={{ borderColor: theme.accentColor, color: accentOnWhite }}
           >
             View All Services <ArrowRight className="h-4 w-4" />
           </Link>
@@ -506,7 +502,7 @@ export default async function HomePage({ params }: PageProps) {
             {whyChooseUs.map((item, i) => (
               <div key={`${item.point}-${i}`} className="rounded-xl border border-gray-100 p-6">
                 <div className="flex items-start gap-3">
-                  <span className="shrink-0" style={{ color: theme.accentColor }}>
+                  <span className="shrink-0" style={{ color: accentOnWhite }}>
                     {getIcon('check-circle', 'w-5 h-5')}
                   </span>
                   <div>
@@ -590,7 +586,7 @@ export default async function HomePage({ params }: PageProps) {
             >
               <Quote
                 className="mb-4 h-8 w-8"
-                style={{ color: theme.accentColor }}
+                style={{ color: accentOnWhite }}
               />
               <div className="mb-4 flex gap-1">
                 {Array.from({ length: 5 }).map((_, starIndex) => (
@@ -613,9 +609,8 @@ export default async function HomePage({ params }: PageProps) {
             <div className="max-w-xl">
               <p
                 className="text-sm font-semibold uppercase tracking-widest"
-                style={{ color: theme.accentColor }}
+                style={{ color: accentOnSecondary }}
               >
-                Service Areas
               </p>
               <h2 className="mt-3 text-3xl font-bold text-gray-900 md:text-4xl">
                 {locations.length > 0
@@ -662,7 +657,7 @@ export default async function HomePage({ params }: PageProps) {
                                 backgroundColor: colorWithOpacity(theme.accentColor, 0.1),
                               }}
                             >
-                              <MapPin className="h-8 w-8" style={{ color: theme.accentColor }} />
+                              <MapPin className="h-8 w-8" style={{ color: accentOnWhite }} />
                             </div>
                           }
                         />
@@ -671,7 +666,7 @@ export default async function HomePage({ params }: PageProps) {
                           className="flex h-full items-center justify-center"
                           style={{ backgroundColor: colorWithOpacity(theme.accentColor, 0.1) }}
                         >
-                          <MapPin className="h-8 w-8" style={{ color: theme.accentColor }} />
+                          <MapPin className="h-8 w-8" style={{ color: accentOnWhite }} />
                         </div>
                       )}
                       <div
@@ -690,8 +685,8 @@ export default async function HomePage({ params }: PageProps) {
                         {excerpt}
                       </p>
                       <span
-                        className="mt-4 inline-flex items-center gap-2 text-sm font-semibold transition group-hover:gap-3"
-                        style={{ color: theme.accentColor }}
+                        className="mt-4 inline-flex items-center gap-2 text-sm font-semibold underline decoration-2 underline-offset-2 transition group-hover:gap-3"
+                        style={{ color: accentOnWhite }}
                       >
                         Explore {location.city}
                         <ArrowRight className="h-4 w-4" />
@@ -735,7 +730,7 @@ export default async function HomePage({ params }: PageProps) {
                   <span>{faq.question}</span>
                   <ChevronDown
                     className="h-5 w-5 shrink-0 transition-transform duration-200 group-open:rotate-180"
-                    style={{ color: theme.accentColor }}
+                    style={{ color: accentOnWhite }}
                   />
                 </summary>
                 <p className="mt-4 leading-relaxed text-gray-600">{faq.answer}</p>
