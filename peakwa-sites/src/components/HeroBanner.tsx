@@ -28,7 +28,7 @@ export function HeroBanner({ site, heroImage, title, subtitle, children }: HeroB
       {heroImage ? (
         <>
           <div className="absolute inset-0">
-            <LcpHeroImage slug={site.slug} alt={`${site.businessName} hero banner`} />
+            <LcpHeroImage src={heroImage} alt={`${site.businessName} hero banner`} />
           </div>
           <div
             className="absolute inset-0"

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Navbar } from '@/src/components/Navbar';
+import { SiteNavbar } from '@/src/components/SiteNavbar';
 import { Footer } from '@/src/components/Footer';
 import { BackToTopLazy } from '@/src/components/BackToTopLazy';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
@@ -54,7 +54,7 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
     <div className={clsx('flex min-h-screen flex-col', fontClass)} style={cssVars}>
       <main className="order-2 flex-1">{children}</main>
       <div className="order-1 sticky top-0 z-50 w-full shrink-0">
-        <Navbar
+        <SiteNavbar
           site={site}
           theme={theme}
           servicesContent={servicesContent}

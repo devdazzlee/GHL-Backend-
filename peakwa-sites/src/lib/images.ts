@@ -1,9 +1,9 @@
 import { cache } from 'react';
 import { API_URL } from '@/src/config/config';
 
-/** ~412 CSS px × 2 DPR; single mobile URL (no srcSet) avoids a second 1280w download. */
-export const HERO_MOBILE_WIDTH = 828;
-export const HERO_DESKTOP_WIDTH = 1280;
+/** Mobile LCP source width passed to Pexels before Next.js optimization. */
+export const HERO_MOBILE_WIDTH = 750;
+export const HERO_DESKTOP_WIDTH = 960;
 
 export function pexelsImageSrc(src: string, width: number, height?: number): string {
   if (!src.includes('pexels.com')) return src;
@@ -21,7 +21,7 @@ export function pexelsImageSrc(src: string, width: number, height?: number): str
 }
 
 export function heroMobileSrc(src: string): string {
-  return pexelsImageSrc(src, HERO_MOBILE_WIDTH, 552);
+  return pexelsImageSrc(src, HERO_MOBILE_WIDTH, 500);
 }
 
 export function heroDesktopSrc(src: string): string {

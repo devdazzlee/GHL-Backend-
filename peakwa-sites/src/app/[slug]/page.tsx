@@ -11,8 +11,7 @@ import { SiteImage } from '@/src/components/SiteImage';
 import { getAllActiveSites, getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
-import { getSiteImages, HERO_MOBILE_WIDTH } from '@/src/lib/images';
-import { lcpHeroUrl } from '@/src/lib/lcpHero';
+import { getSiteImages } from '@/src/lib/images';
 import { darkenHex, getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 
 type PageProps = {
@@ -20,6 +19,7 @@ type PageProps = {
 };
 
 export const revalidate = 3600;
+export const dynamic = 'force-static';
 
 export async function generateStaticParams() {
   try {
@@ -254,11 +254,6 @@ export default async function HomePage({ params }: PageProps) {
 
   return (
     <>
-      {images.hero ? (
-        <link rel="preload" as="image" href={lcpHeroUrl(slug, HERO_MOBILE_WIDTH)} fetchPriority="high" />
-      ) : null}
-      <LocalBusinessSchema site={site} imageUrl={images.hero} />
-      <WebSiteSchema site={site} />
       <section
         className="relative flex min-h-[100dvh] items-center overflow-hidden"
         style={
@@ -271,7 +266,7 @@ export default async function HomePage({ params }: PageProps) {
           <>
             <div className="absolute inset-0">
               <LcpHeroImage
-                slug={slug}
+                src={images.hero}
                 alt={`${site.businessName} hero background`}
               />
             </div>
@@ -291,7 +286,7 @@ export default async function HomePage({ params }: PageProps) {
           </>
         )}
         <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
-          <div className="max-w-3xl animate-fade-up">
+          <div className="max-w-3xl">
             <h1 className="text-5xl font-black leading-tight tracking-tight md:text-7xl">
               {hero.heading || `Welcome to ${site.businessName}`}
             </h1>
@@ -762,6 +757,8 @@ export default async function HomePage({ params }: PageProps) {
         subtext={cta.subtext}
         buttonText={cta.buttonText}
       />
+      <LocalBusinessSchema site={site} imageUrl={images.hero} />
+      <WebSiteSchema site={site} />
     </>
   );
 }

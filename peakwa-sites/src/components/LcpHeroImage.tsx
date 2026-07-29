@@ -1,30 +1,29 @@
-import { HERO_DESKTOP_WIDTH, HERO_MOBILE_WIDTH } from '@/src/lib/images';
-import { lcpHeroUrl } from '@/src/lib/lcpHero';
+import Image from 'next/image';
+import { heroMobileSrc } from '@/src/lib/images';
 
 type LcpHeroImageProps = {
-  slug: string;
+  /** Raw hero URL from the site API (Pexels). */
+  src: string;
   alt: string;
 };
 
 /**
- * LCP hero via same-origin `/api/lcp-hero` so preload Link headers match and Vercel CDN caches bytes.
+ * LCP hero: Next.js Image `priority` injects a matching `<link rel=preload>` in `<head>`
+ * and serves AVIF/WebP from the edge — no dynamic `/api` hop.
  */
-export function LcpHeroImage({ slug, alt }: LcpHeroImageProps) {
-  const mobile = lcpHeroUrl(slug, HERO_MOBILE_WIDTH);
-  const desktop = lcpHeroUrl(slug, HERO_DESKTOP_WIDTH);
+export function LcpHeroImage({ src, alt }: LcpHeroImageProps) {
+  const pexels = heroMobileSrc(src);
 
   return (
-    <picture className="absolute inset-0 block h-full w-full">
-      <source media="(min-width: 769px)" srcSet={desktop} />
-      <img
-        src={mobile}
-        alt={alt}
-        width={828}
-        height={552}
-        fetchPriority="high"
-        decoding="async"
-        className="h-full w-full object-cover"
-      />
-    </picture>
+    <Image
+      src={pexels}
+      alt={alt}
+      fill
+      priority
+      fetchPriority="high"
+      sizes="(max-width: 768px) 100vw, 1280px"
+      quality={68}
+      className="object-cover"
+    />
   );
 }

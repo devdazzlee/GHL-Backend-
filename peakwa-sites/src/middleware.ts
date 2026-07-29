@@ -1,9 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { IS_SEARCH_INDEXABLE } from '@/src/config';
-import { HERO_MOBILE_WIDTH } from '@/src/lib/images';
-import { lcpHeroUrl } from '@/src/lib/lcpHero';
-import { isSiteHomePath } from '@/src/lib/paths';
 import { robotsHeaderValue } from '@/src/lib/seo';
 
 export function middleware(request: NextRequest) {
@@ -17,13 +14,6 @@ export function middleware(request: NextRequest) {
   });
 
   response.headers.set('X-Robots-Tag', robotsHeaderValue(IS_SEARCH_INDEXABLE));
-
-  const slug = pathname.match(/^\/([^/]+)\/?$/)?.[1];
-  if (slug && isSiteHomePath(pathname, slug)) {
-    const preloadPath = lcpHeroUrl(slug, HERO_MOBILE_WIDTH);
-    response.headers.append('Link', `<${preloadPath}>; rel=preload; as=image`);
-  }
-
   return response;
 }
 
