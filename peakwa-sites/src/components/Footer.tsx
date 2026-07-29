@@ -156,7 +156,11 @@ export function Footer({ site, theme }: FooterProps) {
               ['Contact', `${base}/contact`],
             ].map(([label, href]) => (
               <li key={label}>
-                <Link href={href} className="opacity-90 transition hover:opacity-100">
+                <Link
+                  href={href}
+                  className="transition hover:opacity-90"
+                  style={{ color: mutedText }}
+                >
                   {label}
                 </Link>
               </li>
@@ -177,7 +181,11 @@ export function Footer({ site, theme }: FooterProps) {
                 <IconBadge accentColor={theme.accentColor} textOnAccent={accentText}>
                   <Phone className="h-[18px] w-[18px]" strokeWidth={2} />
                 </IconBadge>
-                <a href={`tel:${site.phone}`} className="opacity-90 transition hover:opacity-100">
+                <a
+                  href={`tel:${site.phone}`}
+                  className="transition hover:opacity-90"
+                  style={{ color: mutedText }}
+                >
                   {site.phone}
                 </a>
               </li>
@@ -189,7 +197,8 @@ export function Footer({ site, theme }: FooterProps) {
                 </IconBadge>
                 <a
                   href={`mailto:${site.email}`}
-                  className="break-all opacity-90 transition hover:opacity-100"
+                  className="break-all transition hover:opacity-90"
+                  style={{ color: mutedText }}
                 >
                   {site.email}
                 </a>
@@ -199,7 +208,7 @@ export function Footer({ site, theme }: FooterProps) {
               <IconBadge accentColor={theme.accentColor} textOnAccent={accentText}>
                 <MapPin className="h-[18px] w-[18px]" strokeWidth={2} />
               </IconBadge>
-              <span className="opacity-90">
+              <span style={{ color: mutedText }}>
                 {site.city}, {site.state}
               </span>
             </li>
