@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config/config';
 import { ALL_SITES_CACHE_TAG, siteCacheTag } from '@/src/lib/siteCache';
 import type { GeneratedSite, LocationPage } from './types';
@@ -15,7 +16,7 @@ function fetchInit(cache: FetchCacheOptions): RequestInit {
   return { next: cache };
 }
 
-export async function getSiteBySlug(slug: string): Promise<GeneratedSite | null> {
+export const getSiteBySlug = cache(async (slug: string): Promise<GeneratedSite | null> => {
   const res = await fetch(
     `${API_URL}/phase4/sites/${encodeURIComponent(slug)}`,
     fetchInit({ revalidate: 3600, tags: [ALL_SITES_CACHE_TAG, siteCacheTag(slug)] }),
@@ -23,7 +24,7 @@ export async function getSiteBySlug(slug: string): Promise<GeneratedSite | null>
   if (!res.ok) return null;
   const data = await res.json();
   return data.data?.site || null;
-}
+});
 
 /** Loads every ACTIVE site for the platform sitemap (paginated API). */
 export async function getAllActiveSites(): Promise<GeneratedSite[]> {

@@ -8,15 +8,27 @@ import { FAQSchema, LocalBusinessSchema, WebSiteSchema } from '@/src/components/
 import { LcpHeroImage } from '@/src/components/LcpHeroImage';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
-import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
+import { getAllActiveSites, getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
-import { getSiteImages } from '@/src/lib/images';
+import { getSiteImages, HERO_MOBILE_WIDTH } from '@/src/lib/images';
+import { lcpHeroUrl } from '@/src/lib/lcpHero';
 import { darkenHex, getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
+
+export const revalidate = 3600;
+
+export async function generateStaticParams() {
+  try {
+    const sites = await getAllActiveSites();
+    return sites.map((site) => ({ slug: site.slug }));
+  } catch {
+    return [];
+  }
+}
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
@@ -187,11 +199,12 @@ function getLocationExcerpt(content: string | null | undefined): string {
 
 export default async function HomePage({ params }: PageProps) {
   const { slug } = await params;
-  const site = await getSiteBySlug(slug);
+  const [site, images, locations] = await Promise.all([
+    getSiteBySlug(slug),
+    getSiteImages(slug),
+    getLocationPages(slug),
+  ]);
   if (!site) notFound();
-
-  const images = await getSiteImages(slug);
-  const locations = await getLocationPages(slug);
   const content = parseJson<HomeContent>(site.homeContent, {});
   const theme = resolveTheme(site);
   const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
@@ -241,10 +254,13 @@ export default async function HomePage({ params }: PageProps) {
 
   return (
     <>
+      {images.hero ? (
+        <link rel="preload" as="image" href={lcpHeroUrl(slug, HERO_MOBILE_WIDTH)} fetchPriority="high" />
+      ) : null}
       <LocalBusinessSchema site={site} imageUrl={images.hero} />
       <WebSiteSchema site={site} />
       <section
-        className="relative flex min-h-screen items-center overflow-hidden"
+        className="relative flex min-h-[100dvh] items-center overflow-hidden"
         style={
           images.hero
             ? { color: '#FFFFFF' }
@@ -255,7 +271,7 @@ export default async function HomePage({ params }: PageProps) {
           <>
             <div className="absolute inset-0">
               <LcpHeroImage
-                src={images.hero}
+                slug={slug}
                 alt={`${site.businessName} hero background`}
               />
             </div>

@@ -1,11 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { IS_SEARCH_INDEXABLE } from '@/src/config';
-import { fetchHeroImageUrl, heroMobileSrc } from '@/src/lib/images';
+import { HERO_MOBILE_WIDTH } from '@/src/lib/images';
+import { lcpHeroUrl } from '@/src/lib/lcpHero';
 import { isSiteHomePath } from '@/src/lib/paths';
 import { robotsHeaderValue } from '@/src/lib/seo';
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   const requestHeaders = new Headers(request.headers);
@@ -19,11 +20,8 @@ export async function middleware(request: NextRequest) {
 
   const slug = pathname.match(/^\/([^/]+)\/?$/)?.[1];
   if (slug && isSiteHomePath(pathname, slug)) {
-    const hero = await fetchHeroImageUrl(slug);
-    if (hero) {
-      const preloadUrl = heroMobileSrc(hero);
-      response.headers.append('Link', `<${preloadUrl}>; rel=preload; as=image`);
-    }
+    const preloadPath = lcpHeroUrl(slug, HERO_MOBILE_WIDTH);
+    response.headers.append('Link', `<${preloadPath}>; rel=preload; as=image`);
   }
 
   return response;
