@@ -1,7 +1,7 @@
 import { API_URL } from '@/src/config/config';
 
-/** Mobile LCP width (Moto-class ~412px viewport × DPR ≈ 640–750). */
-export const HERO_MOBILE_WIDTH = 640;
+/** ~412 CSS px × 2 DPR; single mobile URL (no srcSet) avoids a second 1280w download. */
+export const HERO_MOBILE_WIDTH = 828;
 export const HERO_DESKTOP_WIDTH = 1280;
 
 export function pexelsImageSrc(src: string, width: number, height?: number): string {
@@ -20,11 +20,26 @@ export function pexelsImageSrc(src: string, width: number, height?: number): str
 }
 
 export function heroMobileSrc(src: string): string {
-  return pexelsImageSrc(src, HERO_MOBILE_WIDTH, 427);
+  return pexelsImageSrc(src, HERO_MOBILE_WIDTH, 552);
 }
 
 export function heroDesktopSrc(src: string): string {
   return pexelsImageSrc(src, HERO_DESKTOP_WIDTH, 720);
+}
+
+/** Lightweight hero lookup for edge middleware (cached). */
+export async function fetchHeroImageUrl(slug: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_URL}/phase4/sites/${encodeURIComponent(slug)}/images`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const hero = data.data?.images?.hero;
+    return typeof hero === 'string' && hero.length > 0 ? hero : null;
+  } catch {
+    return null;
+  }
 }
 
 export function heroImageSrc(src: string): string {

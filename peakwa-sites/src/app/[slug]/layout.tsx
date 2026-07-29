@@ -1,19 +1,14 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Navbar } from '@/src/components/Navbar';
 import { Footer } from '@/src/components/Footer';
 import { BackToTopLazy } from '@/src/components/BackToTopLazy';
-import { HeroPreload } from '@/src/components/HeroPreload';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
-import { getSiteImages, heroMobileSrc } from '@/src/lib/images';
-import { isSiteHomePath } from '@/src/lib/paths';
 import { resolveTheme } from '@/src/lib/theme';
 import { getMetadataBase } from '@/src/lib/seo';
 import clsx from 'clsx';
-import { preload } from 'react-dom';
 
 type LayoutProps = {
   children: React.ReactNode;
@@ -39,14 +34,6 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
   const site = await fetchSiteBySlug(slug);
   if (!site) notFound();
 
-  const headersList = await headers();
-  const pathname = headersList.get('x-pathname') ?? '';
-  const isHome = isSiteHomePath(pathname, slug);
-  const heroSrc = isHome ? (await getSiteImages(slug)).hero : null;
-  if (heroSrc) {
-    preload(heroMobileSrc(heroSrc), { as: 'image', fetchPriority: 'high' });
-  }
-
   const locations = await getLocationPages(slug);
   const servicesContent = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
@@ -65,16 +52,19 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
 
   return (
     <div className={clsx('flex min-h-screen flex-col', fontClass)} style={cssVars}>
-      {heroSrc ? <HeroPreload src={heroSrc} /> : null}
-      <Navbar
-        site={site}
-        theme={theme}
-        servicesContent={servicesContent}
-        locations={locations}
-      />
-      <main className="flex-1">{children}</main>
-      <Footer site={site} theme={theme} />
-      <BackToTopLazy accentColor={theme.accentColor} />
+      <main className="order-2 flex-1">{children}</main>
+      <div className="order-1 sticky top-0 z-50 w-full shrink-0">
+        <Navbar
+          site={site}
+          theme={theme}
+          servicesContent={servicesContent}
+          locations={locations}
+        />
+      </div>
+      <div className="order-3">
+        <Footer site={site} theme={theme} />
+        <BackToTopLazy accentColor={theme.accentColor} />
+      </div>
     </div>
   );
 }
