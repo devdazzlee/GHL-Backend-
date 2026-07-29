@@ -1,13 +1,17 @@
 import { API_URL } from '@/src/config/config';
 
-/** Resize Pexels URLs before Next.js optimization to cut bytes on the wire. */
-export function pexelsImageSrc(src: string, width: number): string {
+/** Mobile LCP width (Moto-class ~412px viewport × DPR ≈ 640–750). */
+export const HERO_MOBILE_WIDTH = 640;
+export const HERO_DESKTOP_WIDTH = 1280;
+
+export function pexelsImageSrc(src: string, width: number, height?: number): string {
   if (!src.includes('pexels.com')) return src;
   try {
     const url = new URL(src);
     url.searchParams.set('auto', 'compress');
     url.searchParams.set('cs', 'tinysrgb');
     url.searchParams.set('w', String(Math.min(Math.max(width, 320), 2400)));
+    if (height) url.searchParams.set('h', String(height));
     url.searchParams.set('fit', 'crop');
     return url.toString();
   } catch {
@@ -15,8 +19,16 @@ export function pexelsImageSrc(src: string, width: number): string {
   }
 }
 
+export function heroMobileSrc(src: string): string {
+  return pexelsImageSrc(src, HERO_MOBILE_WIDTH, 427);
+}
+
+export function heroDesktopSrc(src: string): string {
+  return pexelsImageSrc(src, HERO_DESKTOP_WIDTH, 720);
+}
+
 export function heroImageSrc(src: string): string {
-  return pexelsImageSrc(src, 1920);
+  return heroDesktopSrc(src);
 }
 
 /** Rough max width from a `sizes` attribute for remote URL tuning. */

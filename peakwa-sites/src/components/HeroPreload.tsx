@@ -1,15 +1,15 @@
-import { pexelsImageSrc } from '@/src/lib/images';
+import { heroDesktopSrc, heroMobileSrc } from '@/src/lib/images';
 
 type HeroPreloadProps = {
   src: string;
 };
 
-/** Early LCP discovery: preload the same URLs the hero <picture> will request. */
+/** Preload must match LcpHeroImage URLs byte-for-byte. */
 export function HeroPreload({ src }: HeroPreloadProps) {
   if (!src.includes('pexels.com')) return null;
 
-  const mobile = pexelsImageSrc(src, 750);
-  const desktop = pexelsImageSrc(src, 1920);
+  const mobile = heroMobileSrc(src);
+  const desktop = heroDesktopSrc(src);
 
   return (
     <>
