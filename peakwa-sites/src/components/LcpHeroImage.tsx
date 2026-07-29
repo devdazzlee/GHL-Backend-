@@ -1,23 +1,32 @@
-import Image from 'next/image';
-import { heroImageSrc } from '@/src/lib/images';
+import { pexelsImageSrc } from '@/src/lib/images';
 
 type LcpHeroImageProps = {
   src: string;
   alt: string;
 };
 
-/** Server-rendered hero image so LCP is discoverable immediately (priority + no client lazy-load). */
+/**
+ * Hero LCP element: responsive Pexels URLs in HTML (no client lazy-load, no
+ * /_next/image round-trip) so Slow 4G can start the download from the first document.
+ */
 export function LcpHeroImage({ src, alt }: LcpHeroImageProps) {
+  const mobile = pexelsImageSrc(src, 750);
+  const desktop = pexelsImageSrc(src, 1920);
+
   return (
-    <Image
-      src={heroImageSrc(src)}
-      alt={alt}
-      fill
-      priority
-      fetchPriority="high"
-      sizes="100vw"
-      className="object-cover"
-      referrerPolicy="no-referrer"
-    />
+    <picture className="absolute inset-0 block h-full w-full">
+      <source media="(max-width: 768px)" srcSet={mobile} />
+      <img
+        src={desktop}
+        alt={alt}
+        width={1920}
+        height={1080}
+        fetchPriority="high"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        className="h-full w-full object-cover"
+        sizes="100vw"
+      />
+    </picture>
   );
 }

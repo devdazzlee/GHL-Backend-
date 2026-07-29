@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Navbar } from '@/src/components/Navbar';
 import { Footer } from '@/src/components/Footer';
-import { BackToTop } from '@/src/components/BackToTop';
-import { SiteLoader } from '@/src/components/SiteLoader';
+import { BackToTopLazy } from '@/src/components/BackToTopLazy';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
@@ -53,12 +52,6 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
 
   return (
     <div className={clsx('flex min-h-screen flex-col', fontClass)} style={cssVars}>
-      <SiteLoader
-        businessName={site.businessName}
-        primaryColor={theme.primaryColor}
-        accentColor={theme.accentColor}
-        tagline={`${site.city}, ${site.state}`}
-      />
       <Navbar
         site={site}
         theme={theme}
@@ -67,7 +60,7 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
       />
       <main className="flex-1">{children}</main>
       <Footer site={site} theme={theme} />
-      <BackToTop accentColor={theme.accentColor} />
+      <BackToTopLazy accentColor={theme.accentColor} />
     </div>
   );
 }

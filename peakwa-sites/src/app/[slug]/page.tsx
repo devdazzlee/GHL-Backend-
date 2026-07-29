@@ -6,6 +6,7 @@ import { ArrowRight, ChevronDown, MapPin, Phone, Quote, Star } from 'lucide-reac
 import { CtaBanner } from '@/src/components/CtaBanner';
 import { FAQSchema, LocalBusinessSchema, WebSiteSchema } from '@/src/components/SchemaMarkup';
 import { LcpHeroImage } from '@/src/components/LcpHeroImage';
+import { HeroPreload } from '@/src/components/HeroPreload';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
@@ -241,6 +242,7 @@ export default async function HomePage({ params }: PageProps) {
 
   return (
     <>
+      {images.hero ? <HeroPreload src={images.hero} /> : null}
       <LocalBusinessSchema site={site} imageUrl={images.hero} />
       <WebSiteSchema site={site} />
       <section
