@@ -1,18 +1,22 @@
 import type { MetadataRoute } from 'next';
-import { IS_SEARCH_INDEXABLE, SITE_BASE_URL } from '@/src/config/config';
+import { IS_SEARCH_INDEXABLE, SITE_BASE_URL } from '@/src/config';
+import { rootSitemapUrl } from '@/src/lib/sitemap';
 
-/** Root robots.txt — allows crawlers when the deployment URL is indexable. */
 export default function robots(): MetadataRoute.Robots {
+  const base = SITE_BASE_URL.replace(/\/$/, '');
+  const sitemap = rootSitemapUrl();
+
   if (!IS_SEARCH_INDEXABLE) {
     return {
       rules: { userAgent: '*', disallow: '/' },
+      sitemap,
+      host: base,
     };
   }
 
-  const base = SITE_BASE_URL.replace(/\/$/, '');
-
   return {
     rules: { userAgent: '*', allow: '/' },
+    sitemap,
     host: base,
   };
 }

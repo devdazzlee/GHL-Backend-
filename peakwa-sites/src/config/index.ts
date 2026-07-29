@@ -6,6 +6,9 @@
  *   NEXT_PUBLIC_SITE_BASE_URL
  *   NEXT_PUBLIC_API_URL
  *   NEXT_PUBLIC_ALLOW_SEARCH_INDEXING=true|false
+ *     unset + production URL → indexable
+ *     unset + localhost + `next dev` → indexable (SEO parity while developing)
+ *     unset + localhost + `next start` → not indexable
  *   REVALIDATE_SECRET (optional override)
  */
 import {
@@ -50,8 +53,11 @@ export const REVALIDATE_SECRET =
   (IS_PRODUCTION ? PRODUCTION_REVALIDATE_SECRET : LOCAL_REVALIDATE_SECRET);
 
 export const IS_SEARCH_INDEXABLE =
-  envIndexing === 'true' ||
-  (envIndexing !== 'false' && !isLocalHostUrl(SITE_BASE_URL));
+  envIndexing === 'true'
+    ? true
+    : envIndexing === 'false'
+      ? false
+      : !isLocalHostUrl(SITE_BASE_URL) || process.env.NODE_ENV === 'development';
 
 /** Named config object for consumers that prefer a single import. */
 export const appConfig = {

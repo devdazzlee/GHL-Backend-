@@ -2,7 +2,12 @@ import type { Metadata } from 'next';
 import { IS_SEARCH_INDEXABLE, SITE_BASE_URL } from '@/src/config';
 import type { GeneratedSite } from '@/src/lib/types';
 
-/** Shared robots directive — indexable in production, blocked on localhost. */
+/** HTTP X-Robots-Tag value — must stay in sync with getSiteRobots(). */
+export function robotsHeaderValue(indexable: boolean = IS_SEARCH_INDEXABLE): string {
+  return indexable ? 'index, follow' : 'noindex, nofollow';
+}
+
+/** Shared robots directive — indexable in production and in local `next dev`. */
 export function getSiteRobots(): NonNullable<Metadata['robots']> {
   if (!IS_SEARCH_INDEXABLE) {
     return { index: false, follow: false };

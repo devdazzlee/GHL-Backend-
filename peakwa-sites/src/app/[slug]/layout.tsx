@@ -8,7 +8,7 @@ import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
 import { resolveTheme } from '@/src/lib/theme';
-import { getMetadataBase, getSiteRobots } from '@/src/lib/seo';
+import { getMetadataBase } from '@/src/lib/seo';
 import clsx from 'clsx';
 
 type LayoutProps = {
@@ -27,7 +27,6 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
 
   return {
     metadataBase: getMetadataBase(),
-    robots: getSiteRobots(),
   };
 }
 
