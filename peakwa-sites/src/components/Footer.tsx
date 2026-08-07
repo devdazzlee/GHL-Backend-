@@ -30,10 +30,12 @@ function InstagramIcon({ className }: { className?: string }) {
   );
 }
 
-function TwitterIcon({ className }: { className?: string }) {
+function WebsiteIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
     </svg>
   );
 }
@@ -52,8 +54,8 @@ function buildSocialLinks(site: GeneratedSite): SocialLink[] {
     },
     {
       href: site.websiteUrl || '',
-      label: 'Twitter',
-      icon: <TwitterIcon className="h-[18px] w-[18px]" />,
+      label: 'Website',
+      icon: <WebsiteIcon className="h-[18px] w-[18px]" />,
     },
   ];
 }
@@ -66,22 +68,36 @@ function SocialIconButton({
   accentText,
 }: SocialLink & { accentColor: string; accentText: string }) {
   const className =
-    'flex h-10 w-10 items-center justify-center rounded-full shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-lg';
+    'flex h-10 w-10 items-center justify-center rounded-full shadow-md transition duration-200';
+  const style = { backgroundColor: accentColor, color: accentText };
 
-  if (!href) return null;
+  // Always show the icon. When a URL is set, make it a real outbound link;
+  // otherwise render a non-interactive badge so the footer still looks complete.
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={label}
+        title={label}
+        className={`${className} hover:-translate-y-0.5 hover:shadow-lg`}
+        style={style}
+      >
+        {icon}
+      </a>
+    );
+  }
 
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
+    <span
       aria-label={label}
       title={label}
-      className={className}
-      style={{ backgroundColor: accentColor, color: accentText }}
+      className={`${className} cursor-default opacity-90`}
+      style={style}
     >
       {icon}
-    </a>
+    </span>
   );
 }
 
@@ -109,7 +125,7 @@ export function Footer({ site, theme }: FooterProps) {
   const mutedText = getMutedTextOnBackground(theme.primaryColor);
   const accentText = getTextColor(theme.accentColor);
   const base = `/${site.slug}`;
-  const socialLinks = buildSocialLinks(site).filter((link) => Boolean(link.href));
+  const socialLinks = buildSocialLinks(site);
 
   return (
     <footer
@@ -126,7 +142,6 @@ export function Footer({ site, theme }: FooterProps) {
             Trusted {site.industry} professionals serving {site.city}, {site.state} and
             surrounding communities.
           </p>
-          {socialLinks.length > 0 ? (
           <div className="mt-6 flex flex-wrap gap-3">
             {socialLinks.map((link) => (
               <SocialIconButton
@@ -137,7 +152,6 @@ export function Footer({ site, theme }: FooterProps) {
               />
             ))}
           </div>
-          ) : null}
         </div>
 
         <div>
