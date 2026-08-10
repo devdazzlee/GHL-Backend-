@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, ExternalLink, MapPin, Minus, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import {
   addLocationPages,
+  addLocationPagesByRadius,
   addPhase4Service,
   deletePhase4Service,
   deletePhase4Site,
@@ -47,13 +48,17 @@ import { CardListSkeleton } from '../components/ui/skeleton';
 import { SITE_BASE_URL } from '../config/config';
 import { cn } from '../lib/utils';
 import { formatDate } from '../utils/format';
+import { DESIGN_CATALOG, DESIGN_VARIANT_COUNT, getDesignCatalogItem } from '../data/designCatalog';
 
 type SiteTab = 'home' | 'about' | 'services' | 'contact' | 'blog' | 'locations' | 'contacts';
 type EditTab = 'business' | 'colors' | 'regenerate' | 'status';
 
 const SITE_URL = SITE_BASE_URL.replace(/\/$/, '');
 
-function openSitePreview(slug: string) {
+function openSitePreview(slug: string, status?: SiteStatus) {
+  if (status && status !== 'ACTIVE') {
+    return;
+  }
   window.open(`${SITE_URL}/${slug}`, '_blank', 'noopener,noreferrer');
 }
 
@@ -133,6 +138,10 @@ function SiteThemeSection({ site }: { site: SiteWithTheme }) {
         <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs font-medium capitalize text-slate-200 ring-1 ring-inset ring-slate-700">
           Font: {theme.fontStyle}
         </span>
+        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 ring-1 ring-inset ring-slate-700">
+          Design {site.designVariant ?? 1}/{DESIGN_VARIANT_COUNT}:{' '}
+          {getDesignCatalogItem(site.designVariant).name}
+        </span>
       </div>
     </div>
   );
@@ -200,8 +209,13 @@ function SiteCard({
           variant="outline"
           size="sm"
           className="flex-1 min-w-[7.5rem]"
-          onClick={() => openSitePreview(site.slug)}
-          title="Preview site"
+          disabled={site.status !== 'ACTIVE'}
+          onClick={() => openSitePreview(site.slug, site.status)}
+          title={
+            site.status === 'ACTIVE'
+              ? 'Preview site'
+              : 'Only ACTIVE sites can be previewed publicly'
+          }
         >
           <ExternalLink className="h-3.5 w-3.5" />
           Preview
@@ -340,7 +354,13 @@ function ReadableValue({ value }: { value: unknown }) {
   return <span className="text-sm text-slate-300">{String(value)}</span>;
 }
 
-function PageContentPanel({ content }: { content: string | null }) {
+function PageContentPanel({
+  content,
+  className,
+}: {
+  content: string | null;
+  className?: string;
+}) {
   const parsed = parseJsonContent(content);
 
   if (!parsed) {
@@ -350,7 +370,12 @@ function PageContentPanel({ content }: { content: string | null }) {
   }
 
   return (
-    <div className="max-h-[min(50vh,420px)] overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+    <div
+      className={cn(
+        'rounded-lg border border-slate-800 bg-slate-950/50 p-4',
+        className,
+      )}
+    >
       <ReadableValue value={parsed} />
     </div>
   );
@@ -446,7 +471,10 @@ export function GeneratedSitesPage() {
   const [siteContacts, setSiteContacts] = useState<ContactSubmission[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [locationMode, setLocationMode] = useState<'manual' | 'radius'>('radius');
   const [locationRows, setLocationRows] = useState<Phase4LocationInput[]>([emptyLocationRow()]);
+  const [radiusZip, setRadiusZip] = useState('');
+  const [radiusMiles, setRadiusMiles] = useState('15');
   const [addingLocations, setAddingLocations] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Phase4GeneratedSite | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -484,6 +512,10 @@ export function GeneratedSitesPage() {
       accentColor: siteData.accentColor || siteData.theme?.accentColor || '#6366F1',
       heroStyle: siteData.heroStyle || siteData.theme?.heroStyle || 'dark',
       fontStyle: siteData.fontStyle || siteData.theme?.fontStyle || 'modern',
+      designVariant: String(siteData.designVariant ?? 1),
+      yearsInBusiness: siteData.yearsInBusiness || '',
+      customersServed: siteData.customersServed || '',
+      projectsCompleted: siteData.projectsCompleted || '',
       logoUrl: siteData.logoUrl || '',
       status: siteData.status || 'ACTIVE',
     });
@@ -599,16 +631,15 @@ export function GeneratedSitesPage() {
   }
 
   async function refreshAfterEdit(updated: Phase4GeneratedSite, message: string) {
-    const merged = { ...(editTarget ?? {}), ...updated } as SiteWithTheme;
     setSites((prev) =>
       prev.map((s) => (s.id === updated.id ? { ...s, ...updated, template: s.template } : s)),
     );
-    setEditTarget(merged);
-    populateEditForms(merged);
     if (selectedSite?.id === updated.id) {
       setSelectedSite((prev) => (prev ? { ...prev, ...updated } : prev));
     }
-    setEditSuccess(message);
+    setEditOpen(false);
+    setEditTarget(null);
+    setEditSuccess(null);
     setSuccess(message);
     await loadSites();
   }
@@ -660,9 +691,13 @@ export function GeneratedSitesPage() {
             ? editData.fontStyle
             : 'modern'
         ) as 'modern' | 'classic' | 'friendly',
+        designVariant: Math.min(50, Math.max(1, Number(editData.designVariant) || 1)),
+        yearsInBusiness: editData.yearsInBusiness?.trim() || null,
+        customersServed: editData.customersServed?.trim() || null,
+        projectsCompleted: editData.projectsCompleted?.trim() || null,
         logoUrl: editData.logoUrl?.trim() || null,
       } as SiteUpdatePayload);
-      await refreshAfterEdit(updated, 'Theme colors saved.');
+      await refreshAfterEdit(updated, 'Theme, design, and stats saved.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save theme');
     } finally {
@@ -708,6 +743,41 @@ export function GeneratedSitesPage() {
   async function handleAddLocationPages(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedSite) return;
+
+    if (locationMode === 'radius') {
+      const zipCode = radiusZip.trim();
+      const miles = Number(radiusMiles);
+      if (!/^\d{5}(-\d{4})?$/.test(zipCode)) {
+        setError('Enter a valid 5-digit ZIP code.');
+        return;
+      }
+      if (!Number.isFinite(miles) || miles <= 0 || miles > 100) {
+        setError('Radius must be between 1 and 100 miles.');
+        return;
+      }
+
+      setAddingLocations(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        const pages = await addLocationPagesByRadius(selectedSite.id, {
+          zipCode,
+          radiusMiles: miles,
+        });
+        const refreshed = await fetchPhase4Site(selectedSite.slug);
+        setSelectedSite(refreshed);
+        setLocationDialogOpen(false);
+        setRadiusZip('');
+        setActiveTab('locations');
+        setSuccess(`Added ${pages.length} location page(s) within ${miles} miles of ${zipCode}.`);
+        await loadSites();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to add location pages by radius');
+      } finally {
+        setAddingLocations(false);
+      }
+      return;
+    }
 
     const locations = locationRows
       .map((row) => ({
@@ -872,7 +942,7 @@ export function GeneratedSitesPage() {
     >
       <PageHeader
         title="Generated Sites"
-        description="View AI-generated websites and manage location landing pages."
+        description={`View AI-generated websites and manage location landing pages. ${DESIGN_VARIANT_COUNT} unique site designs available — each new site rotates to a different layout.`}
       />
 
       {error ? <ErrorBanner message={error} onDismiss={() => setError(null)} /> : null}
@@ -957,8 +1027,8 @@ export function GeneratedSitesPage() {
       </div>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="flex h-[min(90vh,800px)] max-h-[min(90vh,800px)] max-w-3xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
+          <DialogHeader className="shrink-0 pr-8">
             <DialogTitle>{selectedSite?.businessName ?? 'Site details'}</DialogTitle>
             <DialogDescription>
               Generated website content and location pages
@@ -966,56 +1036,13 @@ export function GeneratedSitesPage() {
           </DialogHeader>
 
           {detailLoading ? (
-            <div className="flex items-center justify-center py-12 text-slate-400">
+            <div className="flex min-h-0 flex-1 items-center justify-center text-slate-400">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Loading site details…
             </div>
           ) : selectedSite ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-slate-500">Industry</p>
-                  <p className="text-sm capitalize text-slate-200">{selectedSite.industry}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Location</p>
-                  <p className="text-sm text-slate-200">
-                    {selectedSite.city}, {selectedSite.state}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Slug</p>
-                  <p className="font-mono text-sm text-slate-300">{selectedSite.slug}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Status</p>
-                  <div className="mt-1">
-                    <SiteStatusBadge status={selectedSite.status} />
-                  </div>
-                </div>
-                {selectedSite.phone ? (
-                  <div>
-                    <p className="text-xs text-slate-500">Phone</p>
-                    <p className="text-sm text-slate-200">{selectedSite.phone}</p>
-                  </div>
-                ) : null}
-                {selectedSite.email ? (
-                  <div>
-                    <p className="text-xs text-slate-500">Email</p>
-                    <p className="text-sm text-slate-200">{selectedSite.email}</p>
-                  </div>
-                ) : null}
-                {selectedSite.description ? (
-                  <div className="sm:col-span-2">
-                    <p className="text-xs text-slate-500">Description</p>
-                    <p className="text-sm text-slate-300">{selectedSite.description}</p>
-                  </div>
-                ) : null}
-              </div>
-
-              <SiteThemeSection site={selectedSite} />
-
-              <div className="flex flex-wrap gap-1 border-b border-slate-800 pb-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+              <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-800 pb-1">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -1032,6 +1059,52 @@ export function GeneratedSitesPage() {
                   </button>
                 ))}
               </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                <div className="mb-4 grid gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-slate-500">Industry</p>
+                    <p className="text-sm capitalize text-slate-200">{selectedSite.industry}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Location</p>
+                    <p className="text-sm text-slate-200">
+                      {selectedSite.city}, {selectedSite.state}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Slug</p>
+                    <p className="font-mono text-sm text-slate-300">{selectedSite.slug}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Status</p>
+                    <div className="mt-1">
+                      <SiteStatusBadge status={selectedSite.status} />
+                    </div>
+                  </div>
+                  {selectedSite.phone ? (
+                    <div>
+                      <p className="text-xs text-slate-500">Phone</p>
+                      <p className="text-sm text-slate-200">{selectedSite.phone}</p>
+                    </div>
+                  ) : null}
+                  {selectedSite.email ? (
+                    <div>
+                      <p className="text-xs text-slate-500">Email</p>
+                      <p className="text-sm text-slate-200">{selectedSite.email}</p>
+                    </div>
+                  ) : null}
+                  {selectedSite.description ? (
+                    <div className="sm:col-span-2">
+                      <p className="text-xs text-slate-500">Description</p>
+                      <p className="text-sm text-slate-300">{selectedSite.description}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mb-4">
+                  <SiteThemeSection site={selectedSite} />
+                </div>
 
               {activeTab === 'services' ? (
                 <div className="space-y-4">
@@ -1187,6 +1260,7 @@ export function GeneratedSitesPage() {
                   content={tabs.find((t) => t.id === activeTab)?.content ?? null}
                 />
               )}
+              </div>
             </div>
           ) : null}
         </DialogContent>
@@ -1320,28 +1394,31 @@ export function GeneratedSitesPage() {
       </AlertDialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent key={editTarget?.id} className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent
+          key={editTarget?.id}
+          className="flex h-[min(85vh,720px)] max-h-[min(85vh,720px)] max-w-2xl flex-col overflow-hidden"
+        >
+          <DialogHeader className="shrink-0">
             <DialogTitle>Edit {editTarget?.businessName ?? 'site'}</DialogTitle>
             <DialogDescription>Update business info, theme, status, or regenerate content.</DialogDescription>
           </DialogHeader>
 
           {editTarget ? (
-            <div className="space-y-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
               {editLoading ? (
-                <div className="flex items-center justify-center py-12 text-slate-400">
+                <div className="flex flex-1 items-center justify-center text-slate-400">
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Loading site data…
                 </div>
               ) : (
-                <div className="space-y-4">
+                <>
               {editSuccess ? (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                <div className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
                   {editSuccess}
                 </div>
               ) : null}
 
-              <div className="flex flex-wrap gap-1 border-b border-slate-800 pb-1">
+              <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-800 pb-1">
                 {[
                   { id: 'business' as const, label: 'Business Info' },
                   { id: 'colors' as const, label: 'Colors & Theme' },
@@ -1364,6 +1441,7 @@ export function GeneratedSitesPage() {
                 ))}
               </div>
 
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {editTab === 'business' ? (
                 <form onSubmit={(e) => void handleSaveBusiness(e)} className="space-y-4">
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -1624,6 +1702,79 @@ export function GeneratedSitesPage() {
                       </Select>
                     </div>
                   </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                      Site design ({DESIGN_VARIANT_COUNT} available)
+                    </label>
+                    <Select
+                      value={String(editData.designVariant || '1')}
+                      onValueChange={(value) =>
+                        setEditData((prev) => ({ ...prev, designVariant: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a design" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {DESIGN_CATALOG.map((item) => (
+                          <SelectItem key={item.id} value={String(item.id)}>
+                            #{item.id} · {item.name} ({item.family})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {getDesignCatalogItem(Number(editData.designVariant) || 1).description}
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                        Years in business
+                      </label>
+                      <input
+                        type="text"
+                        value={editData.yearsInBusiness || ''}
+                        onChange={(e) =>
+                          setEditData((prev) => ({ ...prev, yearsInBusiness: e.target.value }))
+                        }
+                        className={inputClass}
+                        placeholder="e.g. 12"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                        Customers served
+                      </label>
+                      <input
+                        type="text"
+                        value={editData.customersServed || ''}
+                        onChange={(e) =>
+                          setEditData((prev) => ({ ...prev, customersServed: e.target.value }))
+                        }
+                        className={inputClass}
+                        placeholder="e.g. 850+"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                        Projects completed
+                      </label>
+                      <input
+                        type="text"
+                        value={editData.projectsCompleted || ''}
+                        onChange={(e) =>
+                          setEditData((prev) => ({ ...prev, projectsCompleted: e.target.value }))
+                        }
+                        className={inputClass}
+                        placeholder="e.g. 1200"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Stats only appear on the live site when filled. Empty fields stay hidden — no fake
+                    numbers.
+                  </p>
                   <div className="flex justify-end">
                     <Button type="submit" disabled={savingTheme}>
                       {savingTheme ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -1683,7 +1834,8 @@ export function GeneratedSitesPage() {
                   </div>
                 </form>
               ) : null}
-                </div>
+              </div>
+                </>
               )}
             </div>
           ) : null}
@@ -1695,75 +1847,129 @@ export function GeneratedSitesPage() {
           <DialogHeader>
             <DialogTitle>Add location pages</DialogTitle>
             <DialogDescription>
-              Generate SEO landing pages for additional cities served by{' '}
-              {selectedSite?.businessName}.
+              Generate SEO landing pages for cities served by {selectedSite?.businessName}. Use ZIP
+              radius to add cities in range, or enter cities manually.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAddLocationPages} className="space-y-4">
-            <div className="max-h-[min(50vh,360px)] space-y-3 overflow-y-auto pr-1">
-              {locationRows.map((row, index) => (
-                <div
-                  key={index}
-                  className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1fr_1fr_auto]"
-                >
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">City</label>
-                    <input
-                      type="text"
-                      required
-                      value={row.city}
-                      onChange={(e) => {
-                        const next = [...locationRows];
-                        next[index] = { ...next[index], city: e.target.value };
-                        setLocationRows(next);
-                      }}
-                      className={inputClass}
-                      placeholder="Hackensack"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">County</label>
-                    <input
-                      type="text"
-                      required
-                      value={row.county}
-                      onChange={(e) => {
-                        const next = [...locationRows];
-                        next[index] = { ...next[index], county: e.target.value };
-                        setLocationRows(next);
-                      }}
-                      className={inputClass}
-                      placeholder="Bergen"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={locationRows.length <= 1}
-                      onClick={() =>
-                        setLocationRows((rows) => rows.filter((_, i) => i !== index))
-                      }
-                      aria-label="Remove row"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
+          <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
               size="sm"
-              onClick={() => setLocationRows((rows) => [...rows, emptyLocationRow()])}
+              variant={locationMode === 'radius' ? 'default' : 'outline'}
+              onClick={() => setLocationMode('radius')}
             >
-              <Plus className="h-4 w-4" />
-              Add row
+              ZIP + radius
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={locationMode === 'manual' ? 'default' : 'outline'}
+              onClick={() => setLocationMode('manual')}
+            >
+              Manual cities
+            </Button>
+          </div>
+
+          <form onSubmit={handleAddLocationPages} className="space-y-4">
+            {locationMode === 'radius' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">ZIP code</label>
+                  <input
+                    type="text"
+                    required
+                    value={radiusZip}
+                    onChange={(e) => setRadiusZip(e.target.value)}
+                    className={inputClass}
+                    placeholder="07030"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Radius (miles)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    required
+                    value={radiusMiles}
+                    onChange={(e) => setRadiusMiles(e.target.value)}
+                    className={inputClass}
+                    placeholder="15"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="max-h-[min(50vh,360px)] space-y-3 overflow-y-auto pr-1">
+                  {locationRows.map((row, index) => (
+                    <div
+                      key={index}
+                      className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1fr_1fr_auto]"
+                    >
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-500">City</label>
+                        <input
+                          type="text"
+                          required
+                          value={row.city}
+                          onChange={(e) => {
+                            const next = [...locationRows];
+                            next[index] = { ...next[index], city: e.target.value };
+                            setLocationRows(next);
+                          }}
+                          className={inputClass}
+                          placeholder="Hackensack"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-500">
+                          County
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={row.county}
+                          onChange={(e) => {
+                            const next = [...locationRows];
+                            next[index] = { ...next[index], county: e.target.value };
+                            setLocationRows(next);
+                          }}
+                          className={inputClass}
+                          placeholder="Bergen"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          disabled={locationRows.length <= 1}
+                          onClick={() =>
+                            setLocationRows((rows) => rows.filter((_, i) => i !== index))
+                          }
+                          aria-label="Remove row"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocationRows((rows) => [...rows, emptyLocationRow()])}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add row
+                </Button>
+              </>
+            )}
 
             <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
               <Button

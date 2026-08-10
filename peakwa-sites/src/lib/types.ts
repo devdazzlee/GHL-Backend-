@@ -27,6 +27,10 @@ export type GeneratedSite = {
   accentColor: string;
   heroStyle: string;
   fontStyle: string;
+  designVariant?: number;
+  yearsInBusiness?: string | null;
+  customersServed?: string | null;
+  projectsCompleted?: string | null;
   theme: SiteTheme;
   locationPages?: LocationPage[];
   facebookUrl?: string | null;

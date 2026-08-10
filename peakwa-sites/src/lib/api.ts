@@ -23,7 +23,10 @@ export const getSiteBySlug = cache(async (slug: string): Promise<GeneratedSite |
   );
   if (!res.ok) return null;
   const data = await res.json();
-  return data.data?.site || null;
+  const site = (data.data?.site as GeneratedSite | undefined) || null;
+  // Public storefront only serves ACTIVE sites; INACTIVE/PENDING must not open.
+  if (!site || site.status !== 'ACTIVE') return null;
+  return site;
 });
 
 /** Loads every ACTIVE site for the platform sitemap (paginated API). */

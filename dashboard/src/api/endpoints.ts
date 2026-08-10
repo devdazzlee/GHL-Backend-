@@ -397,6 +397,10 @@ export interface Phase4GeneratedSite {
   accentColor?: string;
   heroStyle?: string;
   fontStyle?: string;
+  designVariant?: number;
+  yearsInBusiness?: string | null;
+  customersServed?: string | null;
+  projectsCompleted?: string | null;
   theme?: {
     primaryColor: string;
     secondaryColor: string;
@@ -439,6 +443,10 @@ export interface Phase4SiteUpdatePayload {
   accentColor?: string;
   heroStyle?: 'dark' | 'light';
   fontStyle?: 'modern' | 'classic' | 'friendly';
+  designVariant?: number;
+  yearsInBusiness?: string | null;
+  customersServed?: string | null;
+  projectsCompleted?: string | null;
   status?: SiteStatus;
 }
 
@@ -559,6 +567,18 @@ export async function addLocationPages(
   const { data } = await api.post<ApiResponse<{ pages: Phase4LocationPage[] }>>(
     `/phase4/sites/${siteId}/location-pages`,
     { locations },
+    { timeout: 300000 },
+  );
+  return data.data.pages;
+}
+
+export async function addLocationPagesByRadius(
+  siteId: string,
+  payload: { zipCode: string; radiusMiles: number; maxLocations?: number },
+): Promise<Phase4LocationPage[]> {
+  const { data } = await api.post<ApiResponse<{ pages: Phase4LocationPage[] }>>(
+    `/phase4/sites/${siteId}/location-pages/by-radius`,
+    payload,
     { timeout: 300000 },
   );
   return data.data.pages;

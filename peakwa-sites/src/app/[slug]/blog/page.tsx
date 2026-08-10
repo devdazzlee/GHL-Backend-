@@ -10,6 +10,8 @@ import { getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type BlogContent, type BlogPost } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { resolveDesignPreset } from '@/src/designs/presets';
+import clsx from 'clsx';
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -244,6 +246,7 @@ export default async function BlogPage({ params }: PageProps) {
   const images = await getSiteImages(slug);
   const content = parseJson<BlogContent>(site.blogContent, {});
   const theme = resolveTheme(site);
+  const design = resolveDesignPreset(site.designVariant);
   const posts = content.posts ?? [];
 
   const featuredPost = posts[0];
@@ -252,10 +255,20 @@ export default async function BlogPage({ params }: PageProps) {
 
   const heroImage = images.hero ?? images.blog[0] ?? null;
   const heroTextColor = heroImage ? '#FFFFFF' : getTextColor(theme.primaryColor);
+  const compactHero = design.heroLayout === 'compact' || design.family === 'utility';
+  const centeredHero =
+    design.heroLayout === 'fullBleedCentered' ||
+    design.family === 'editorial' ||
+    design.navStyle === 'centered';
 
   return (
     <>
-      <section className="relative flex min-h-[320px] items-end overflow-hidden md:min-h-[380px]">
+      <section
+        className={clsx(
+          'relative flex items-end overflow-hidden',
+          compactHero ? 'min-h-[240px] md:min-h-[280px]' : 'min-h-[320px] md:min-h-[380px]',
+        )}
+      >
         {heroImage ? (
           <>
             <div className="absolute inset-0">
@@ -263,7 +276,7 @@ export default async function BlogPage({ params }: PageProps) {
                 src={heroImage}
                 alt={`${site.businessName} blog`}
                 fill
-                className="object-cover"
+                className="object-cover object-center"
                 priority
                 sizes="100vw"
                 fallback={
@@ -286,12 +299,20 @@ export default async function BlogPage({ params }: PageProps) {
           />
         )}
         <div
-          className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-12 pt-24 sm:px-6 lg:px-8"
+          className={clsx(
+            'relative z-10 mx-auto w-full max-w-6xl px-4 pb-12 pt-24 sm:px-6 lg:px-8',
+            centeredHero && 'text-center',
+          )}
           style={{ color: heroTextColor }}
         >
           <Breadcrumbs site={site} items={[{ label: 'Blog' }]} />
           <h1 className="mt-4 text-4xl font-bold md:text-5xl">Blog</h1>
-          <p className="mt-3 max-w-2xl text-lg opacity-90">
+          <p
+            className={clsx(
+              'mt-3 max-w-2xl text-lg opacity-90',
+              centeredHero && 'mx-auto',
+            )}
+          >
             Insights, tips, and updates from {site.businessName} in {site.city}, {site.state}
           </p>
         </div>

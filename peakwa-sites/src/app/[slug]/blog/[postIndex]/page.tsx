@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import clsx from 'clsx';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { ArticleSchema, FAQSchema } from '@/src/components/SchemaMarkup';
@@ -11,6 +12,12 @@ import { getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type BlogContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { resolveDesignPreset } from '@/src/designs/presets';
+import {
+  cardChromeStyle,
+  contentMaxClass,
+  sectionPadClass,
+} from '@/src/designs/chrome';
 
 type PageProps = { params: Promise<{ slug: string; postIndex: string }> };
 
@@ -59,6 +66,7 @@ export default async function BlogPostPage({ params }: PageProps) {
   if (!post) notFound();
 
   const theme = resolveTheme(site);
+  const design = resolveDesignPreset(site.designVariant);
   const blogImage = images.blog[index] ?? null;
 
   const sections = (post.sections ?? []).filter(
@@ -75,6 +83,12 @@ export default async function BlogPostPage({ params }: PageProps) {
   const legacyParagraphs =
     sections.length === 0 ? splitParagraphs(post.content || '') : [];
 
+  const headingClass = clsx(
+    design.family === 'bold' && 'font-bold uppercase tracking-wide',
+    design.family === 'editorial' && 'font-medium',
+    design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+  );
+
   return (
     <>
       <ArticleSchema
@@ -85,8 +99,8 @@ export default async function BlogPostPage({ params }: PageProps) {
         postIndex={index}
       />
       <FAQSchema faqs={faqs} />
-      <SectionWrapper background="#fff">
-        <div className="mx-auto max-w-3xl">
+      <SectionWrapper background="#fff" className={sectionPadClass(design)}>
+        <div className={contentMaxClass(design)}>
           <Breadcrumbs
             site={site}
             items={[
@@ -104,12 +118,15 @@ export default async function BlogPostPage({ params }: PageProps) {
           </Link>
 
           {blogImage ? (
-            <div className="relative mb-8 h-[400px] w-full overflow-hidden rounded-2xl">
+            <div
+              className="relative mb-8 aspect-[16/10] w-full overflow-hidden"
+              style={{ borderRadius: 'var(--design-card-radius)' }}
+            >
               <SiteImage
                 src={blogImage}
                 alt={post.title || 'Blog post'}
                 fill
-                className="object-cover"
+                className="object-cover object-center"
                 sizes="(max-width: 768px) 100vw, 768px"
                 priority
                 fallback={
@@ -138,7 +155,9 @@ export default async function BlogPostPage({ params }: PageProps) {
             </p>
           </div>
 
-          <h1 className="mt-6 text-3xl font-bold text-gray-900 md:text-4xl">{post.title}</h1>
+          <h1 className={clsx('mt-6 text-3xl text-gray-900 md:text-4xl', headingClass)}>
+            {post.title}
+          </h1>
           <p className="mt-3 text-sm text-gray-500">Author: {site.businessName}</p>
 
           <div className="my-8 h-px w-full bg-gray-200" />
@@ -151,7 +170,7 @@ export default async function BlogPostPage({ params }: PageProps) {
             {sections.map((section, i) => (
               <section key={`section-${i}`} className="mb-8">
                 {section.heading ? (
-                  <h2 className="mb-4 mt-10 text-2xl font-bold text-gray-900">
+                  <h2 className={clsx('mb-4 mt-10 text-2xl text-gray-900', headingClass)}>
                     {section.heading}
                   </h2>
                 ) : null}
@@ -181,12 +200,15 @@ export default async function BlogPostPage({ params }: PageProps) {
           {faqs.length > 0 ? (
             <section className="mt-12">
               <div className="mb-8 h-px w-full bg-gray-200" />
-              <h2 className="text-2xl font-bold text-gray-900">Frequently Asked Questions</h2>
+              <h2 className={clsx('text-2xl text-gray-900', headingClass)}>
+                Frequently Asked Questions
+              </h2>
               <div className="mt-6 space-y-4">
                 {faqs.map((faq, i) => (
                   <div
                     key={`faq-${i}`}
-                    className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+                    className="bg-white p-6"
+                    style={cardChromeStyle()}
                   >
                     <p className="font-bold text-gray-900">{faq.question}</p>
                     <p className="mt-2 leading-relaxed text-gray-600">{faq.answer}</p>

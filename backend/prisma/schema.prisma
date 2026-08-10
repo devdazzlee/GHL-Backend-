@@ -198,6 +198,10 @@ model GeneratedSite {
   accentColor     String         @default("#6366F1")
   heroStyle       String         @default("dark")
   fontStyle       String         @default("modern")
+  designVariant   Int            @default(1)
+  yearsInBusiness String?
+  customersServed String?
+  projectsCompleted String?
   address         String?
   facebookUrl     String?
   instagramUrl    String?

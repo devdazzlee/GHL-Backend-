@@ -2,17 +2,27 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buildPageMetadata } from '@/src/lib/seo';
-import { ArrowRight, ChevronDown, MapPin, Phone, Quote, Star } from 'lucide-react';
+import { ArrowRight, ChevronDown, MapPin, Quote, Star } from 'lucide-react';
 import { CtaBanner } from '@/src/components/CtaBanner';
 import { FAQSchema, LocalBusinessSchema, WebSiteSchema } from '@/src/components/SchemaMarkup';
-import { LcpHeroImage } from '@/src/components/LcpHeroImage';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getAllActiveSites, getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
-import { darkenHex, getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { industryRequiresLicense } from '@/src/lib/industryClaims';
+import { resolveDesignPreset, servicesGridClass } from '@/src/designs/presets';
+import { FamilyHero } from '@/src/designs/FamilyHero';
+import { getDesignRecipe } from '@/src/designs/catalog';
+import { homeSectionFlexOrder } from '@/src/designs/sectionOrder';
+import {
+  cardChromeStyle,
+  headingAlignClass,
+  sectionPadClass,
+} from '@/src/designs/chrome';
+import clsx from 'clsx';
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -59,15 +69,6 @@ function hashString(value: string): number {
   return value.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
 }
 
-function trustedSinceYear(industry: string): number {
-  const years = [2005, 2007, 2009, 2011, 2013, 2015, 2017];
-  return years[hashString(industry) % years.length]!;
-}
-
-function customersServedLabel(slug: string): string {
-  return hashString(slug) % 2 === 0 ? '1000+' : '500+';
-}
-
 function getNearbyAreas(city: string, state: string): string[] {
   const njAreas = [
     'Newark',
@@ -95,13 +96,8 @@ function getNearbyAreas(city: string, state: string): string[] {
   ];
 }
 
-function buildTrustBadges(city: string) {
-  return [
-    {
-      icon: 'shield',
-      title: 'Licensed & Insured',
-      subtitle: 'Fully certified professionals',
-    },
+function buildTrustBadges(city: string, industry: string) {
+  const badges = [
     {
       icon: 'dollar-sign',
       title: 'Free Estimates',
@@ -118,6 +114,22 @@ function buildTrustBadges(city: string) {
       subtitle: `Proudly serving ${city}`,
     },
   ];
+
+  if (industryRequiresLicense(industry)) {
+    badges.unshift({
+      icon: 'shield',
+      title: 'Licensed & Insured',
+      subtitle: 'Fully certified professionals',
+    });
+  } else {
+    badges.unshift({
+      icon: 'shield',
+      title: 'Trusted Local Pros',
+      subtitle: 'Reliable service you can count on',
+    });
+  }
+
+  return badges;
 }
 
 function buildFaqs(
@@ -131,7 +143,7 @@ function buildFaqs(
     ? `Call us at ${phone}`
     : 'Reach out through our contact page';
 
-  return [
+  const faqs = [
     {
       question: `What areas does ${businessName} serve?`,
       answer: `${businessName} proudly serves ${city}, ${state} and the surrounding communities. If you're nearby and aren't sure whether we cover your area, just give us a call and we'll be glad to help.`,
@@ -139,10 +151,6 @@ function buildFaqs(
     {
       question: 'How do I request a quote or schedule service?',
       answer: `Getting started is simple. ${contactSentence} or fill out the contact form on our website, and we'll respond promptly to discuss your needs and find a time that works for you.`,
-    },
-    {
-      question: `Is ${businessName} licensed and insured?`,
-      answer: `Yes. ${businessName} is fully licensed and insured, so you can have complete peace of mind knowing your ${industry} project is handled by qualified, accountable professionals.`,
     },
     {
       question: 'Do you offer free estimates?',
@@ -153,6 +161,15 @@ function buildFaqs(
       answer: `As a locally owned business in ${city}, we pair professional expertise with genuine, personal customer care. We treat every customer like a neighbor and take real pride in the quality of our work.`,
     },
   ];
+
+  if (industryRequiresLicense(industry)) {
+    faqs.splice(2, 0, {
+      question: `Is ${businessName} licensed and insured?`,
+      answer: `Yes. ${businessName} maintains the licensing and insurance expected for ${industry} work, so you can have peace of mind knowing your project is handled by qualified professionals.`,
+    });
+  }
+
+  return faqs;
 }
 
 function buildTestimonials(businessName: string, city: string, industry: string) {
@@ -215,113 +232,50 @@ export default async function HomePage({ params }: PageProps) {
   const homeServices = services.length > 6 ? services.slice(0, 6) : services;
   const whyChooseUs = content.whyChooseUs ?? [];
   const cta = content.cta ?? {};
-  const trustedYear = trustedSinceYear(site.industry);
-  const customersLabel = customersServedLabel(site.slug);
-  const serviceCount = services.length || 6;
+  const design = resolveDesignPreset(site.designVariant);
+  const recipe = getDesignRecipe(site.designVariant);
+  const sectionOrder = homeSectionFlexOrder(recipe.sectionOrder);
+  const serviceCount = services.length;
   const nearbyAreas = getNearbyAreas(site.city, site.state);
   const testimonials = buildTestimonials(site.businessName, site.city, site.industry);
-  const trustBadges = buildTrustBadges(site.city);
+  const trustBadges = buildTrustBadges(site.city, site.industry);
   const faqs = buildFaqs(site.businessName, site.city, site.state, site.industry, site.phone);
 
-  const stats = [
-    {
-      value: String(trustedYear),
-      label: `${site.city} Trusted Since`,
-    },
-    {
-      value: customersLabel,
-      label: 'Customers Served',
-    },
-    {
-      value: String(serviceCount),
-      label: 'Services Offered',
-    },
-    {
-      value: '5.0',
-      label: 'Customer Rating',
-      showStar: true,
-    },
-  ];
-
-  const heroDark = theme.heroStyle === 'dark';
-  const heroBg = heroDark
-    ? `linear-gradient(135deg, ${theme.primaryColor}, ${darkenHex(theme.primaryColor, 0.2)})`
-    : theme.secondaryColor;
-  const heroText = heroDark ? '#FFFFFF' : getTextColor(theme.secondaryColor);
-  const heroOverlay = heroDark
-    ? `radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%)`
-    : `radial-gradient(circle at 20% 50%, rgba(0,0,0,0.04) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(0,0,0,0.03) 0%, transparent 50%)`;
+  const stats: Array<{ value: string; label: string; showStar?: boolean }> = [];
+  if (site.yearsInBusiness?.trim()) {
+    stats.push({ value: site.yearsInBusiness.trim(), label: 'Years in Business' });
+  }
+  if (site.customersServed?.trim()) {
+    stats.push({ value: site.customersServed.trim(), label: 'Customers Served' });
+  }
+  if (site.projectsCompleted?.trim()) {
+    stats.push({ value: site.projectsCompleted.trim(), label: 'Projects Completed' });
+  }
+  if (serviceCount > 0) {
+    stats.push({ value: String(serviceCount), label: 'Services Offered' });
+  }
+  stats.push({ value: site.city, label: 'Primary Service Area' });
 
   return (
     <>
-      <section
-        className="relative flex min-h-[100dvh] items-center overflow-hidden"
-        style={
-          images.hero
-            ? { color: '#FFFFFF' }
-            : { background: heroBg, color: heroText }
-        }
-      >
-        {images.hero ? (
-          <>
-            <div className="absolute inset-0">
-              <LcpHeroImage
-                src={images.hero}
-                alt={`${site.businessName} hero background`}
-              />
-            </div>
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.7) }}
-            />
-          </>
-        ) : (
-          <>
-            <div className="absolute inset-0" style={{ backgroundImage: heroOverlay }} />
-            <div
-              className={
-                heroDark ? 'hero-pattern absolute inset-0' : 'hero-pattern-light absolute inset-0'
-              }
-            />
-          </>
-        )}
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <h1 className="text-5xl font-black leading-tight tracking-tight md:text-7xl">
-              {hero.heading || `Welcome to ${site.businessName}`}
-            </h1>
-            <p className="mt-6 text-xl opacity-80 md:text-2xl">
-              {hero.subheading || `Serving ${site.city}, ${site.state} with pride.`}
-            </p>
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-              <Link
-                href={`/${slug}/contact`}
-                className="inline-flex items-center justify-center rounded-full px-8 py-4 text-sm font-bold shadow-lg transition hover:scale-105"
-                style={{
-                  backgroundColor: theme.accentColor,
-                  color: getTextColor(theme.accentColor),
-                }}
-              >
-                {hero.ctaButton || 'Get Started'}
-              </Link>
-              {site.phone ? (
-                <a
-                  href={`tel:${site.phone}`}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border-2 px-8 py-4 text-sm font-semibold transition hover:bg-white/10"
-                  style={{ borderColor: heroText, color: images.hero ? '#FFFFFF' : heroText }}
-                >
-                  <Phone className="h-4 w-4" />
-                  {site.phone}
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
+      <FamilyHero
+        site={site}
+        theme={theme}
+        design={design}
+        slug={slug}
+        heading={hero.heading || `Welcome to ${site.businessName}`}
+        subheading={hero.subheading || `Serving ${site.city}, ${site.state} with pride.`}
+        ctaButton={hero.ctaButton || 'Get Started'}
+        heroImage={images.hero}
+      />
 
+      <div className="flex flex-col">
+      {/* Skip classic trust strip on editorial/utility — different rhythm */}
+      {design.family !== 'editorial' && design.family !== 'utility' ? (
+      <div style={{ order: sectionOrder.trust }}>
       <SectionWrapper
-        background="#fff"
-        className="!py-10"
+        background={design.family === 'bold' ? theme.primaryColor : '#fff'}
+        className={sectionPadClass(design)}
         style={{ borderBottom: `1px solid ${colorWithOpacity(theme.primaryColor, 0.1)}` }}
       >
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
@@ -333,22 +287,41 @@ export default async function HomePage({ params }: PageProps) {
               <span
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
                 style={{
-                  backgroundColor: colorWithOpacity(theme.accentColor, 0.12),
-                  color: accentOnWhite,
+                  backgroundColor:
+                    design.family === 'bold'
+                      ? 'rgba(255,255,255,0.15)'
+                      : colorWithOpacity(theme.accentColor, 0.12),
+                  color: design.family === 'bold' ? '#fff' : accentOnWhite,
                 }}
               >
                 {getIcon(badge.icon, 'w-6 h-6')}
               </span>
               <div>
-                <p className="font-bold text-gray-900">{badge.title}</p>
-                <p className="mt-0.5 text-sm text-gray-500">{badge.subtitle}</p>
+                <p
+                  className="font-bold"
+                  style={{ color: design.family === 'bold' ? '#fff' : undefined }}
+                >
+                  {badge.title}
+                </p>
+                <p
+                  className={
+                    design.family === 'bold'
+                      ? 'mt-0.5 text-sm text-white/75'
+                      : 'mt-0.5 text-sm text-gray-500'
+                  }
+                >
+                  {badge.subtitle}
+                </p>
               </div>
             </div>
           ))}
         </div>
       </SectionWrapper>
+      </div>
+      ) : null}
 
-      <SectionWrapper background={theme.secondaryColor} className="py-20 md:py-28">
+      <div style={{ order: sectionOrder.about }}>
+      <SectionWrapper background={theme.secondaryColor} className={sectionPadClass(design)}>
         <div className="mx-auto max-w-6xl">
           <div className="grid items-start gap-12 lg:grid-cols-2 lg:gap-20">
             <div className="order-2 lg:order-1">
@@ -392,11 +365,17 @@ export default async function HomePage({ params }: PageProps) {
             <div className="order-1 lg:order-2 lg:pt-2">
               <div className="relative mx-auto w-full max-w-md lg:ml-auto lg:max-w-none">
                 <div
-                  className="absolute -bottom-4 -left-4 h-full w-full rounded-2xl"
-                  style={{ backgroundColor: colorWithOpacity(theme.accentColor, 0.25) }}
+                  className="absolute -bottom-4 -left-4 h-full w-full"
+                  style={{
+                    backgroundColor: colorWithOpacity(theme.accentColor, 0.25),
+                    borderRadius: 'var(--design-card-radius)',
+                  }}
                   aria-hidden
                 />
-                <div className="relative aspect-[5/4] overflow-hidden rounded-2xl shadow-xl">
+                <div
+                  className="relative aspect-[5/4] overflow-hidden shadow-xl"
+                  style={{ borderRadius: 'var(--design-card-radius)' }}
+                >
                   {images.about ? (
                     <SiteImage
                       src={images.about}
@@ -423,34 +402,66 @@ export default async function HomePage({ params }: PageProps) {
           </div>
         </div>
       </SectionWrapper>
+      </div>
 
-      <SectionWrapper background="#fff" className="py-20 md:py-24">
+      <div style={{ order: sectionOrder.services }}>
+      <SectionWrapper background="#fff" className={sectionPadClass(design)}>
         <div className="mx-auto max-w-6xl">
-          <div className="mb-12 text-center">
+          <div className={clsx('mb-12', headingAlignClass(design))}>
             <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">Our Services</h2>
             <div
-              className="mx-auto mt-4 h-1 w-14 rounded-full"
+              className={clsx(
+                'mt-4 h-1 w-14 rounded-full',
+                headingAlignClass(design) === 'text-center' && 'mx-auto',
+              )}
               style={{ backgroundColor: theme.accentColor }}
             />
           </div>
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={servicesGridClass(design.servicesLayout)}>
           {homeServices.map((service, i) => {
             const serviceSlug = slugifyService(service.title || `service-${i}`);
+            const isListLayout =
+              design.servicesLayout === 'listRows' || design.servicesLayout === 'iconLeft';
+
             return (
               <Link
                 key={`${service.title}-${i}`}
                 href={`/${slug}/services/${serviceSlug}`}
-                className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-                style={{ borderTop: `4px solid ${theme.accentColor}` }}
+                className={clsx(
+                  'group overflow-hidden bg-white transition duration-300 hover:-translate-y-1',
+                  isListLayout
+                    ? 'flex flex-col sm:flex-row sm:items-stretch'
+                    : 'flex flex-col',
+                )}
+                style={{
+                  borderTop: isListLayout ? undefined : `4px solid ${theme.accentColor}`,
+                  borderLeft: isListLayout ? `4px solid ${theme.accentColor}` : undefined,
+                  borderRadius: 'var(--design-card-radius)',
+                  boxShadow: 'var(--design-card-shadow)',
+                  border: 'var(--design-card-border)',
+                }}
               >
                 {images.services[i] ? (
-                  <div className="relative h-[180px] w-full overflow-hidden">
+                  <div
+                    className={clsx(
+                      'relative shrink-0 overflow-hidden',
+                      isListLayout
+                        ? 'aspect-[16/10] w-full sm:aspect-auto sm:h-auto sm:w-56 md:w-64 lg:w-72'
+                        : design.servicesLayout === 'megaTiles'
+                          ? 'aspect-[16/10] w-full'
+                          : 'aspect-[4/3] w-full',
+                    )}
+                  >
                     <SiteImage
                       src={images.services[i]!}
                       alt={`${service.title} service`}
                       fill
-                      className="object-cover transition duration-300 group-hover:scale-105"
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover object-center transition duration-300 group-hover:scale-105"
+                      sizes={
+                        isListLayout
+                          ? '(max-width: 640px) 100vw, 288px'
+                          : '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw'
+                      }
                       fallback={
                         <div
                           className="flex h-full items-center justify-center"
@@ -465,7 +476,10 @@ export default async function HomePage({ params }: PageProps) {
                   </div>
                 ) : (
                   <div
-                    className="flex h-20 items-center justify-center"
+                    className={clsx(
+                      'flex shrink-0 items-center justify-center',
+                      isListLayout ? 'h-28 w-full sm:h-auto sm:w-56 md:w-64' : 'aspect-[4/3] w-full',
+                    )}
                     style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.2) }}
                   >
                     <span style={{ color: accentOnWhite }}>
@@ -473,7 +487,12 @@ export default async function HomePage({ params }: PageProps) {
                     </span>
                   </div>
                 )}
-                <div className="flex flex-1 flex-col p-8">
+                <div
+                  className={clsx(
+                    'flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-8 sm:pb-8 sm:pt-6',
+                    isListLayout && 'justify-center',
+                  )}
+                >
                   <h3 className="text-lg font-semibold text-gray-900 group-hover:underline">
                     {service.title}
                   </h3>
@@ -500,8 +519,10 @@ export default async function HomePage({ params }: PageProps) {
         </div>
         </div>
       </SectionWrapper>
+      </div>
 
-      <SectionWrapper background="#fff" className="py-20">
+      <div style={{ order: sectionOrder.why }}>
+      <SectionWrapper background="#fff" className={sectionPadClass(design)}>
         <div className="grid gap-12 lg:grid-cols-2">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">Why Choose Us</h2>
@@ -511,7 +532,11 @@ export default async function HomePage({ params }: PageProps) {
           </div>
           <div className="grid gap-6 sm:grid-cols-2">
             {whyChooseUs.map((item, i) => (
-              <div key={`${item.point}-${i}`} className="rounded-xl border border-gray-100 p-6">
+              <div
+                key={`${item.point}-${i}`}
+                className="bg-white p-6"
+                style={cardChromeStyle()}
+              >
                 <div className="flex items-start gap-3">
                   <span className="shrink-0" style={{ color: accentOnWhite }}>
                     {getIcon('check-circle', 'w-5 h-5')}
@@ -526,9 +551,25 @@ export default async function HomePage({ params }: PageProps) {
           </div>
         </div>
       </SectionWrapper>
+      </div>
 
-      <SectionWrapper background="#fff" className="py-20">
-        <div className="grid grid-cols-2 divide-x divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 md:grid-cols-4 md:divide-y-0">
+      {stats.length > 0 ? (
+      <div style={{ order: sectionOrder.stats }}>
+      <SectionWrapper
+        background={design.sectionRhythm === 'boldBands' ? theme.secondaryColor : '#fff'}
+        className={sectionPadClass(design)}
+      >
+        <div
+          className={clsx(
+            'grid overflow-hidden border border-gray-200',
+            stats.length >= 4
+              ? 'grid-cols-2 divide-x divide-y divide-gray-200 md:grid-cols-4 md:divide-y-0'
+              : stats.length === 3
+                ? 'grid-cols-1 divide-y divide-gray-200 md:grid-cols-3 md:divide-x md:divide-y-0'
+                : 'grid-cols-1 divide-y divide-gray-200 md:grid-cols-2 md:divide-x md:divide-y-0',
+          )}
+          style={{ borderRadius: 'var(--design-card-radius)' }}
+        >
           {stats.map((stat, i) => (
             <div
               key={`${stat.label}-${i}`}
@@ -553,9 +594,12 @@ export default async function HomePage({ params }: PageProps) {
           ))}
         </div>
       </SectionWrapper>
+      </div>
+      ) : null}
 
-      <SectionWrapper background={theme.secondaryColor} className="py-20">
-        <div className="mb-12 text-center">
+      <div style={{ order: sectionOrder.process }}>
+      <SectionWrapper background={theme.secondaryColor} className={sectionPadClass(design)}>
+        <div className={clsx('mb-12', headingAlignClass(design))}>
           <h2 className="text-3xl font-bold text-gray-900">How It Works</h2>
           <p className="mt-3 text-lg text-gray-600">Our simple three-step process</p>
         </div>
@@ -581,9 +625,11 @@ export default async function HomePage({ params }: PageProps) {
           ))}
         </div>
       </SectionWrapper>
+      </div>
 
-      <SectionWrapper background="#fff" className="py-20">
-        <div className="mb-12 text-center">
+      <div style={{ order: sectionOrder.reviews }}>
+      <SectionWrapper background="#fff" className={sectionPadClass(design)}>
+        <div className={clsx('mb-12', headingAlignClass(design))}>
           <h2 className="text-3xl font-bold text-gray-900">What Our Customers Say</h2>
           <p className="mt-3 text-lg text-gray-600">
             Trusted by homeowners and businesses across {site.city}
@@ -593,7 +639,8 @@ export default async function HomePage({ params }: PageProps) {
           {testimonials.map((testimonial) => (
             <article
               key={testimonial.name}
-              className="relative rounded-2xl bg-white p-8 shadow-lg"
+              className="relative bg-white p-8"
+              style={cardChromeStyle()}
             >
               <Quote
                 className="mb-4 h-8 w-8"
@@ -613,8 +660,10 @@ export default async function HomePage({ params }: PageProps) {
           ))}
         </div>
       </SectionWrapper>
+      </div>
 
-      <SectionWrapper background={theme.secondaryColor} className="py-20 md:py-28">
+      <div style={{ order: sectionOrder.locations }}>
+      <SectionWrapper background={theme.secondaryColor} className={sectionPadClass(design)}>
         <div className="mx-auto max-w-6xl">
           <div className="mb-12 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-xl">
@@ -651,7 +700,8 @@ export default async function HomePage({ params }: PageProps) {
                   <Link
                     key={location.id}
                     href={`/${slug}/${location.slug}`}
-                    className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                    className="group overflow-hidden bg-white transition duration-300 hover:-translate-y-1"
+                    style={cardChromeStyle()}
                   >
                     <div className="relative aspect-[16/10] w-full overflow-hidden">
                       {location.imageUrl ? (
@@ -721,11 +771,13 @@ export default async function HomePage({ params }: PageProps) {
           )}
         </div>
       </SectionWrapper>
+      </div>
 
       <FAQSchema faqs={faqs} />
-      <SectionWrapper background="#fff" className="py-20">
+      <div style={{ order: sectionOrder.faq }}>
+      <SectionWrapper background="#fff" className={sectionPadClass(design)}>
         <div className="mx-auto max-w-3xl">
-          <div className="mb-12 text-center">
+          <div className={clsx('mb-12', headingAlignClass(design))}>
             <h2 className="text-3xl font-bold text-gray-900">Frequently Asked Questions</h2>
             <p className="mt-3 text-lg text-gray-600">
               Everything you need to know about working with {site.businessName}
@@ -735,7 +787,8 @@ export default async function HomePage({ params }: PageProps) {
             {faqs.map((faq) => (
               <details
                 key={faq.question}
-                className="group rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition open:shadow-md"
+                className="group bg-white p-6 transition"
+                style={cardChromeStyle()}
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-semibold text-gray-900 [&::-webkit-details-marker]:hidden">
                   <span>{faq.question}</span>
@@ -750,6 +803,8 @@ export default async function HomePage({ params }: PageProps) {
           </div>
         </div>
       </SectionWrapper>
+      </div>
+      </div>
 
       <CtaBanner
         site={site}

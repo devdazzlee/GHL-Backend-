@@ -4,6 +4,7 @@ import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
 import { getSchemaForIndustry } from './industrySchema.service.js';
 import { buildSeoRequirements, ensureSeoMetadata } from './seoMetadata.service.js';
+import { pickDesignVariant } from './designVariant.service.js';
 
 const DEFAULT_THEME = {
   primaryColor: '#1F2937',
@@ -271,7 +272,10 @@ function buildPagePrompt(businessData, pageSchema, pageType, contextNote = '') {
 
   const seoRequirements = buildSeoRequirements(businessData);
 
-  return `Generate ${pageType} page content for ${businessName}, a ${industry} business in ${city}, ${state}. ${details}${servicesInstruction}${blogInstruction}${seoRequirements} Return ONLY valid JSON matching this exact structure: ${pageSchema}. For every field with a word range, treat the lower number as a strict minimum you must reach; keep short fields (headings, buttons, titles) within their limits. Content must be specific to this business and city.`;
+  const accuracyRules =
+    ' Accuracy rules: Never invent licensing, insurance, certifications, years in business, customer counts, ratings, or awards unless the business description explicitly states them. Do not claim the business is licensed or insured unless that is standard and required for this specific industry AND the description supports it. Prefer honest local-service language over unverifiable claims.';
+
+  return `Generate ${pageType} page content for ${businessName}, a ${industry} business in ${city}, ${state}. ${details}${servicesInstruction}${blogInstruction}${seoRequirements}${accuracyRules} Return ONLY valid JSON matching this exact structure: ${pageSchema}. For every field with a word range, treat the lower number as a strict minimum you must reach; keep short fields (headings, buttons, titles) within their limits. Content must be specific to this business and city.`;
 }
 
 async function finalizePageContent(pageType, content, businessData, systemPrompt) {
@@ -1041,6 +1045,7 @@ export async function generateSite(formData) {
 
     const baseSlug = slugify(validated.businessName, validated.city);
     const slug = await ensureUniqueSiteSlug(baseSlug);
+    const designVariant = await pickDesignVariant(slug);
 
     const site = await prisma.generatedSite.create({
       data: {
@@ -1064,6 +1069,7 @@ export async function generateSite(formData) {
         accentColor: theme.accentColor,
         heroStyle: theme.heroStyle,
         fontStyle: theme.fontStyle,
+        designVariant,
       },
       include: { template: true },
     });
@@ -1076,6 +1082,7 @@ export async function generateSite(formData) {
         templateId: template.id,
         industrySchema: schema.industry,
         industry: validated.industry,
+        designVariant,
         theme,
       }),
     );

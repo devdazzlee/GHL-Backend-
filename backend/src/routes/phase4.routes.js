@@ -14,7 +14,7 @@ import {
 import { createSmtpTransporter } from '../services/email.service.js';
 import { scheduleSiteFinalization } from '../services/sitePostProcessing.service.js';
 import { revalidateSiteFrontendCache } from '../services/siteRevalidation.service.js';
-import { generateLocationPages } from '../services/locationPage.service.js';
+import { generateLocationPages, generateLocationPagesByRadius } from '../services/locationPage.service.js';
 import {
   generatePageContent,
   generateSite,
@@ -23,6 +23,7 @@ import {
   listGeneratedSites,
   syncHomeServicesWithServices,
 } from '../services/siteGenerator.service.js';
+import { normalizeDesignVariant } from '../services/designVariant.service.js';
 import {
   createIndustrySchema,
   getAllIndustrySchemas,
@@ -481,6 +482,37 @@ function buildSiteUpdateData(body) {
       );
     }
     updates.fontStyle = fontStyle;
+  }
+
+  if (body.designVariant !== undefined) {
+    const designVariant = normalizeDesignVariant(body.designVariant);
+    if (!designVariant) {
+      throw new AppError('Invalid `designVariant`. Use an integer from 1 to 50.', 400, {
+        code: 'INVALID_BODY',
+      });
+    }
+    updates.designVariant = designVariant;
+  }
+
+  if (body.yearsInBusiness !== undefined) {
+    updates.yearsInBusiness =
+      body.yearsInBusiness != null && body.yearsInBusiness !== ''
+        ? String(body.yearsInBusiness).trim()
+        : null;
+  }
+
+  if (body.customersServed !== undefined) {
+    updates.customersServed =
+      body.customersServed != null && body.customersServed !== ''
+        ? String(body.customersServed).trim()
+        : null;
+  }
+
+  if (body.projectsCompleted !== undefined) {
+    updates.projectsCompleted =
+      body.projectsCompleted != null && body.projectsCompleted !== ''
+        ? String(body.projectsCompleted).trim()
+        : null;
   }
 
   if (body.status !== undefined) {
@@ -1408,6 +1440,27 @@ router.post(
   asyncHandler(async (req, res) => {
     const locations = req.body?.locations;
     const pages = await generateLocationPages(req.params.siteId, locations);
+    return res.status(201).json({
+      success: true,
+      data: { pages },
+      requestId: req.requestId,
+    });
+  }),
+);
+
+router.post(
+  '/sites/:siteId/location-pages/by-radius',
+  asyncHandler(async (req, res) => {
+    const zipCode = String(req.body?.zipCode ?? req.body?.zip ?? '').trim();
+    const radiusMiles = Number(req.body?.radiusMiles ?? req.body?.radius ?? 0);
+    const maxLocations = req.body?.maxLocations != null ? Number(req.body.maxLocations) : undefined;
+
+    const pages = await generateLocationPagesByRadius(req.params.siteId, {
+      zipCode,
+      radiusMiles,
+      maxLocations,
+    });
+
     return res.status(201).json({
       success: true,
       data: { pages },

@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import type { GeneratedSite, LocationPage, SiteTheme } from '@/src/lib/types';
 import type { ServicesContent } from '@/src/lib/content';
+import type { NavStyle } from '@/src/designs/presets';
 
 const Navbar = dynamic(
   () => import('@/src/components/Navbar').then((m) => m.Navbar),
@@ -17,6 +18,7 @@ type SiteNavbarProps = {
   theme: SiteTheme;
   servicesContent: ServicesContent;
   locations: LocationPage[];
+  navStyle?: NavStyle;
 };
 
 export function SiteNavbar(props: SiteNavbarProps) {

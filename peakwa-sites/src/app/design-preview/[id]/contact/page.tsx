@@ -1,49 +1,38 @@
 import type { Metadata } from 'next';
 import { Mail, MapPin, Phone } from 'lucide-react';
-import { notFound } from 'next/navigation';
 import clsx from 'clsx';
-import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { ContactForm } from '@/src/components/ContactForm';
 import { HeroBanner } from '@/src/components/HeroBanner';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
-import { getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type ContactContent } from '@/src/lib/content';
-import { getSiteImages } from '@/src/lib/images';
-import { getTextColor, resolveTheme } from '@/src/lib/theme';
-import type { GeneratedSite } from '@/src/lib/types';
-import { resolveDesignPreset } from '@/src/designs/presets';
+import { getDesignRecipe } from '@/src/designs/catalog';
+import {
+  DESIGN_PREVIEW_CONTACT,
+  DESIGN_PREVIEW_IMAGES,
+} from '@/src/lib/designPreviewSample';
+import { getPreviewContext } from '@/src/lib/designPreviewUtils';
+import { getTextColor } from '@/src/lib/theme';
 
-type PageProps = { params: Promise<{ slug: string }> };
+type PageProps = { params: Promise<{ id: string }> };
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug } = await params;
-  const site = await getSiteBySlug(slug);
-  if (!site) return {};
-
-  const contact = parseJson<ContactContent>(site.contactContent, {});
-  if (!contact.seo?.title || !contact.seo?.metaDescription) return {};
-
-  return buildPageMetadata({
-    site,
-    title: contact.seo.title,
-    description: contact.seo.metaDescription,
-    pathParts: [site.slug, 'contact'],
-  });
+export function generateStaticParams() {
+  return Array.from({ length: 50 }, (_, i) => ({ id: String(i + 1) }));
 }
 
-export default async function ContactPage({ params }: PageProps) {
-  const { slug } = await params;
-  const site = await getSiteBySlug(slug);
-  if (!site) notFound();
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const recipe = getDesignRecipe(Number(id));
+  return {
+    title: `Contact · Preview ${recipe.name}`,
+    robots: { index: false, follow: false },
+  };
+}
 
-  const images = await getSiteImages(slug);
-  const content = parseJson<ContactContent>(site.contactContent, {});
-  const theme = resolveTheme(site);
-  const design = resolveDesignPreset(site.designVariant);
-
-  const siteAddress = (site as GeneratedSite & { address?: string | null }).address ?? '';
-  const mapQuery = encodeURIComponent(`${siteAddress} ${site.city} ${site.state}`.trim());
+export default async function DesignPreviewContactPage({ params }: PageProps) {
+  const { id } = await params;
+  const { site, theme, design } = getPreviewContext(id);
+  const content = DESIGN_PREVIEW_CONTACT;
+  const mapQuery = encodeURIComponent(`${site.city} ${site.state}`);
   const mapSrc = `https://maps.google.com/maps?q=${mapQuery}&output=embed`;
 
   const formFirst =
@@ -56,7 +45,7 @@ export default async function ContactPage({ params }: PageProps) {
     <>
       <HeroBanner
         site={site}
-        heroImage={images.hero}
+        heroImage={DESIGN_PREVIEW_IMAGES.hero}
         title={content.hero?.heading || 'Contact Us'}
         subtitle={content.hero?.subheading || content.intro}
         compact={design.heroLayout === 'compact' || design.family === 'utility'}
@@ -77,7 +66,11 @@ export default async function ContactPage({ params }: PageProps) {
           )}
         >
           <div className={stacked ? '' : 'lg:col-span-3'}>
-            <ContactForm site={site} slug={slug} heading={content.formHeading || 'Get in touch'} />
+            <ContactForm
+              site={site}
+              slug={site.slug}
+              heading={content.formHeading || 'Get in touch'}
+            />
           </div>
           <aside
             className={clsx('p-8 shadow-xl', stacked ? '' : 'lg:col-span-2')}

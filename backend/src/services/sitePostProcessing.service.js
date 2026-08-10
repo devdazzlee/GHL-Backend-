@@ -1,6 +1,5 @@
 import prisma from '../database/client.js';
 import { sendCustomerWelcomeEmail } from './email.service.js';
-import { generateDefaultLocationPagesForSite } from './locationPage.service.js';
 import { revalidateSiteFrontendCache } from './siteRevalidation.service.js';
 
 /**
@@ -21,17 +20,15 @@ export async function finalizeNewSite(siteId) {
   console.info(JSON.stringify({ event: 'site_finalize_start', siteId, slug: site.slug }));
 
   try {
-    const locationPages = await generateDefaultLocationPagesForSite(site.id);
-    if (locationPages.length > 0) {
-      console.info(
-        JSON.stringify({
-          event: 'site_default_location_pages_created',
-          siteId: site.id,
-          slug: site.slug,
-          count: locationPages.length,
-        }),
-      );
-    }
+    // Location pages are additive via dashboard (manual or zip+radius tool).
+    console.info(
+      JSON.stringify({
+        event: 'site_default_location_pages_skipped',
+        siteId: site.id,
+        slug: site.slug,
+        reason: 'radius_or_manual_only',
+      }),
+    );
   } catch (error) {
     console.warn(
       JSON.stringify({

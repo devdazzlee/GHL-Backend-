@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, Phone } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import clsx from 'clsx';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { CtaBanner } from '@/src/components/CtaBanner';
@@ -15,6 +16,15 @@ import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
+import { resolveDesignPreset, type DesignPreset } from '@/src/designs/presets';
+import {
+  buttonRadiusStyle,
+  cardChromeStyle,
+  headingAlignClass,
+  heroBannerProps,
+  sectionPadClass,
+  valuesGridClass,
+} from '@/src/designs/chrome';
 
 type PageProps = { params: Promise<{ slug: string; serviceSlug: string }> };
 
@@ -67,6 +77,14 @@ function extractBenefits(fullDescription: string): string[] {
   ];
 }
 
+function otherServicesGridClass(design: DesignPreset): string {
+  if (design.family === 'utility' || design.servicesLayout === 'listRows') {
+    return 'grid gap-8 md:grid-cols-1';
+  }
+  if (design.servicesLayout === 'grid2') return 'grid gap-8 md:grid-cols-2';
+  return 'grid gap-8 md:grid-cols-3';
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, serviceSlug } = await params;
   const site = await getSiteBySlug(slug);
@@ -87,6 +105,123 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   });
 }
 
+function ServiceHero({
+  site,
+  slug,
+  serviceTitle,
+  serviceImage,
+  theme,
+  design,
+  heading,
+  subheading,
+}: {
+  site: GeneratedSite;
+  slug: string;
+  serviceTitle: string;
+  serviceImage: string | null;
+  theme: SiteTheme;
+  design: DesignPreset;
+  heading: string;
+  subheading?: string | null;
+}) {
+  const hero = heroBannerProps(design);
+  const heroTextColor = serviceImage ? '#FFFFFF' : getTextColor(theme.primaryColor);
+
+  return (
+    <section
+      className={clsx(
+        'relative flex items-center overflow-hidden',
+        hero.compact ? 'min-h-[280px] md:min-h-[320px]' : 'min-h-[420px] md:min-h-[480px]',
+      )}
+    >
+      {serviceImage ? (
+        <>
+          <div className="absolute inset-0">
+            <SiteImage
+              src={serviceImage}
+              alt={`${serviceTitle} service`}
+              fill
+              className="object-cover object-center"
+              priority
+              sizes="100vw"
+              fallback={
+                <div className="h-full w-full" style={{ backgroundColor: theme.primaryColor }} />
+              }
+            />
+          </div>
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.7) }}
+          />
+        </>
+      ) : (
+        <div className="absolute inset-0" style={{ backgroundColor: theme.primaryColor }} />
+      )}
+      <div
+        className={clsx(
+          'relative z-10 mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8',
+          hero.centered && 'text-center',
+        )}
+        style={{ color: heroTextColor }}
+      >
+        <Breadcrumbs
+          site={site}
+          items={[
+            { label: 'Services', href: `/${slug}/services` },
+            { label: serviceTitle },
+          ]}
+        />
+        <h1
+          className={clsx(
+            'mt-6 text-4xl font-bold md:text-5xl',
+            hero.centered ? 'mx-auto max-w-3xl' : 'max-w-3xl',
+          )}
+        >
+          {heading}
+        </h1>
+        {subheading ? (
+          <p
+            className={clsx(
+              'mt-4 text-lg opacity-90',
+              hero.centered ? 'mx-auto max-w-2xl' : 'max-w-2xl',
+            )}
+          >
+            {subheading}
+          </p>
+        ) : null}
+        <div
+          className={clsx(
+            'mt-8 flex flex-col gap-4 sm:flex-row',
+            hero.centered && 'items-center justify-center',
+          )}
+        >
+          <Link
+            href={`/${slug}/contact`}
+            className="inline-flex items-center justify-center px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
+            style={{
+              backgroundColor: theme.accentColor,
+              color: getTextColor(theme.accentColor),
+              ...buttonRadiusStyle(),
+            }}
+          >
+            Get a Free Quote
+          </Link>
+          {site.phone ? (
+            <a
+              href={`tel:${site.phone}`}
+              className="inline-flex items-center justify-center gap-2 border-2 border-white px-8 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              style={buttonRadiusStyle()}
+            >
+              <Phone className="h-4 w-4" />
+              {site.phone}
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function ServiceDetailPage({ params }: PageProps) {
   const { slug, serviceSlug } = await params;
   const site = await getSiteBySlug(slug);
@@ -101,6 +236,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const serviceIndex = allServices.indexOf(service);
   const serviceImage = images.services[serviceIndex] || images.hero;
   const theme = resolveTheme(site);
+  const design = resolveDesignPreset(site.designVariant);
+  const pad = sectionPadClass(design);
   const otherServices = allServices
     .filter((s) => slugifyService(s.title || '') !== serviceSlug)
     .slice(0, 3);
@@ -117,6 +254,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         serviceImage={serviceImage}
         overviewImage={images.about ?? images.services[serviceIndex + 1] ?? images.hero}
         theme={theme}
+        design={design}
         otherServices={otherServices}
         content={content}
       />
@@ -149,75 +287,18 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         description={service.fullDescription || service.shortDescription || ''}
         serviceSlug={serviceSlug}
       />
-      <section className="relative flex min-h-[420px] items-center overflow-hidden md:min-h-[480px]">
-        {serviceImage ? (
-          <>
-            <div className="absolute inset-0">
-              <SiteImage
-                src={serviceImage}
-                alt={`${serviceTitle} service`}
-                fill
-                className="object-cover"
-                priority
-                sizes="100vw"
-                fallback={
-                  <div
-                    className="h-full w-full"
-                    style={{ backgroundColor: theme.primaryColor }}
-                  />
-                }
-              />
-            </div>
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.7) }}
-            />
-          </>
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ backgroundColor: theme.primaryColor }}
-          />
-        )}
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <Breadcrumbs
-            site={site}
-            items={[
-              { label: 'Services', href: `/${slug}/services` },
-              { label: serviceTitle },
-            ]}
-          />
-          <h1 className="mt-6 max-w-3xl text-4xl font-bold text-white md:text-5xl">
-            {serviceTitle}
-          </h1>
-          {service.shortDescription ? (
-            <p className="mt-4 max-w-2xl text-lg text-white/90">{service.shortDescription}</p>
-          ) : null}
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-            <Link
-              href={`/${slug}/contact`}
-              className="inline-flex items-center justify-center rounded-full px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
-              style={{
-                backgroundColor: theme.accentColor,
-                color: getTextColor(theme.accentColor),
-              }}
-            >
-              Get a Free Quote
-            </Link>
-            {site.phone ? (
-              <a
-                href={`tel:${site.phone}`}
-                className="inline-flex items-center justify-center gap-2 rounded-full border-2 border-white px-8 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                <Phone className="h-4 w-4" />
-                {site.phone}
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </section>
+      <ServiceHero
+        site={site}
+        slug={slug}
+        serviceTitle={serviceTitle}
+        serviceImage={serviceImage}
+        theme={theme}
+        design={design}
+        heading={serviceTitle}
+        subheading={service.shortDescription}
+      />
 
-      <SectionWrapper background="#fff" className="py-20">
+      <SectionWrapper background="#fff" className={pad}>
         <div className="mx-auto max-w-3xl">
           {paragraphs.length > 0 ? (
             paragraphs.map((paragraph, i) => (
@@ -240,14 +321,18 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         </div>
       </SectionWrapper>
 
-      <SectionWrapper background={theme.secondaryColor} className="py-20">
+      <SectionWrapper background={theme.secondaryColor} className={pad}>
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-center text-3xl font-bold text-gray-900">
+          <h2 className={clsx('text-3xl font-bold text-gray-900', headingAlignClass(design))}>
             Why Choose Our {serviceTitle}
           </h2>
           <ul className="mt-10 space-y-6">
             {benefits.map((benefit, i) => (
-              <li key={i} className="flex items-start gap-4">
+              <li
+                key={i}
+                className="flex items-start gap-4 bg-white p-6"
+                style={cardChromeStyle()}
+              >
                 <span className="mt-0.5 shrink-0" style={{ color: theme.accentColor }}>
                   {getIcon('check-circle', 'w-6 h-6')}
                 </span>
@@ -258,9 +343,9 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         </div>
       </SectionWrapper>
 
-      <SectionWrapper background="#fff" className="py-20">
+      <SectionWrapper background="#fff" className={pad}>
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-center text-3xl font-bold text-gray-900">
+          <h2 className={clsx('text-3xl font-bold text-gray-900', headingAlignClass(design))}>
             Frequently Asked Questions
           </h2>
           <div className="mt-10">
@@ -270,19 +355,24 @@ export default async function ServiceDetailPage({ params }: PageProps) {
       </SectionWrapper>
 
       {otherServices.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor} className="py-20">
-          <h2 className="mb-10 text-center text-3xl font-bold text-gray-900">
+        <SectionWrapper background={theme.secondaryColor} className={pad}>
+          <h2
+            className={clsx('mb-10 text-3xl font-bold text-gray-900', headingAlignClass(design))}
+          >
             Our Other Services
           </h2>
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className={otherServicesGridClass(design)}>
             {otherServices.map((other) => {
               const otherSlug = slugifyService(other.title || '');
               return (
                 <Link
                   key={other.title}
                   href={`/${slug}/services/${otherSlug}`}
-                  className="group flex flex-col rounded-2xl bg-white p-6 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-                  style={{ borderTop: `4px solid ${theme.accentColor}` }}
+                  className="group flex flex-col bg-white p-6 transition duration-300 hover:-translate-y-1"
+                  style={{
+                    ...cardChromeStyle(),
+                    borderTop: `4px solid ${theme.accentColor}`,
+                  }}
                 >
                   <span style={{ color: theme.accentColor }}>
                     {getIcon(other.icon || 'wrench', 'w-8 h-8')}
@@ -325,6 +415,7 @@ type ServiceDetailFromContentProps = {
   serviceImage: string | null;
   overviewImage: string | null;
   theme: SiteTheme;
+  design: DesignPreset;
   otherServices: Array<{ title?: string; shortDescription?: string; icon?: string }>;
   content: ServicePageContent;
 };
@@ -336,6 +427,7 @@ function ServiceDetailFromContent({
   serviceImage,
   overviewImage,
   theme,
+  design,
   otherServices,
   content,
 }: ServiceDetailFromContentProps) {
@@ -345,6 +437,7 @@ function ServiceDetailFromContent({
   const faqs = (content.faqs || []).filter(
     (faq): faq is { question: string; answer: string } => Boolean(faq.question && faq.answer),
   );
+  const pad = sectionPadClass(design);
 
   return (
     <>
@@ -354,73 +447,19 @@ function ServiceDetailFromContent({
         description={content.overview || ''}
         serviceSlug={slugifyService(serviceTitle)}
       />
-      <section className="relative flex min-h-[420px] items-center overflow-hidden md:min-h-[480px]">
-        {serviceImage ? (
-          <>
-            <div className="absolute inset-0">
-              <SiteImage
-                src={serviceImage}
-                alt={`${serviceTitle} service`}
-                fill
-                className="object-cover"
-                priority
-                sizes="100vw"
-                fallback={
-                  <div
-                    className="h-full w-full"
-                    style={{ backgroundColor: theme.primaryColor }}
-                  />
-                }
-              />
-            </div>
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.7) }}
-            />
-          </>
-        ) : (
-          <div className="absolute inset-0" style={{ backgroundColor: theme.primaryColor }} />
-        )}
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <Breadcrumbs
-            site={site}
-            items={[
-              { label: 'Services', href: `/${slug}/services` },
-              { label: serviceTitle },
-            ]}
-          />
-          <h1 className="mt-6 max-w-3xl text-4xl font-bold text-white md:text-5xl">
-            {heroHeading}
-          </h1>
-          {content.heroSubheading ? (
-            <p className="mt-4 max-w-2xl text-lg text-white/90">{content.heroSubheading}</p>
-          ) : null}
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-            <Link
-              href={`/${slug}/contact`}
-              className="inline-flex items-center justify-center rounded-full px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
-              style={{
-                backgroundColor: theme.accentColor,
-                color: getTextColor(theme.accentColor),
-              }}
-            >
-              Get a Free Quote
-            </Link>
-            {site.phone ? (
-              <a
-                href={`tel:${site.phone}`}
-                className="inline-flex items-center justify-center gap-2 rounded-full border-2 border-white px-8 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                <Phone className="h-4 w-4" />
-                {site.phone}
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </section>
+      <ServiceHero
+        site={site}
+        slug={slug}
+        serviceTitle={serviceTitle}
+        serviceImage={serviceImage}
+        theme={theme}
+        design={design}
+        heading={heroHeading}
+        subheading={content.heroSubheading}
+      />
 
       {content.overview ? (
-        <SectionWrapper background="#fff" className="py-20">
+        <SectionWrapper background="#fff" className={pad}>
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
               <h2 className="text-3xl font-bold text-gray-900">About {serviceTitle}</h2>
@@ -431,12 +470,18 @@ function ServiceDetailFromContent({
               <p className="text-lg leading-relaxed text-gray-600">{content.overview}</p>
             </div>
             {overviewImage ? (
-              <div className="relative h-[320px] w-full overflow-hidden rounded-3xl shadow-xl lg:h-[440px]">
+              <div
+                className="relative aspect-[16/10] w-full overflow-hidden"
+                style={{
+                  borderRadius: 'var(--design-card-radius)',
+                  boxShadow: 'var(--design-card-shadow)',
+                }}
+              >
                 <SiteImage
                   src={overviewImage}
                   alt={`${serviceTitle} at ${site.businessName}`}
                   fill
-                  className="object-cover"
+                  className="object-cover object-center"
                   sizes="(max-width: 1024px) 100vw, 50vw"
                   fallback={
                     <div
@@ -452,14 +497,22 @@ function ServiceDetailFromContent({
       ) : null}
 
       {process.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor} className="py-20">
-          <h2 className="mb-12 text-center text-3xl font-bold text-gray-900">Our Process</h2>
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <SectionWrapper background={theme.secondaryColor} className={pad}>
+          <h2
+            className={clsx('mb-12 text-3xl font-bold text-gray-900', headingAlignClass(design))}
+          >
+            Our Process
+          </h2>
+          <div className={valuesGridClass(design)}>
             {process.map((step, i) => (
-              <div key={step.step ?? i} className="text-center">
+              <div
+                key={step.step ?? i}
+                className="bg-white p-6 text-center"
+                style={cardChromeStyle()}
+              >
                 <div
-                  className="mx-auto flex h-14 w-14 items-center justify-center rounded-full text-xl font-bold text-white"
-                  style={{ backgroundColor: theme.accentColor }}
+                  className="mx-auto flex h-14 w-14 items-center justify-center text-xl font-bold text-white"
+                  style={{ backgroundColor: theme.accentColor, ...buttonRadiusStyle() }}
                 >
                   {i + 1}
                 </div>
@@ -472,16 +525,21 @@ function ServiceDetailFromContent({
       ) : null}
 
       {benefits.length > 0 ? (
-        <SectionWrapper background="#fff" className="py-20">
-          <h2 className="mb-12 text-center text-3xl font-bold text-gray-900">
+        <SectionWrapper background="#fff" className={pad}>
+          <h2
+            className={clsx('mb-12 text-3xl font-bold text-gray-900', headingAlignClass(design))}
+          >
             Benefits of Our {serviceTitle}
           </h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={valuesGridClass(design)}>
             {benefits.map((benefit, i) => (
               <div
                 key={benefit.title ?? i}
-                className="flex items-start gap-4 rounded-2xl bg-white p-6 shadow-md"
-                style={{ borderTop: `4px solid ${theme.accentColor}` }}
+                className="flex items-start gap-4 bg-white p-6"
+                style={{
+                  ...cardChromeStyle(),
+                  borderTop: `4px solid ${theme.accentColor}`,
+                }}
               >
                 <span className="mt-0.5 shrink-0" style={{ color: theme.accentColor }}>
                   {getIcon('check-circle', 'w-6 h-6')}
@@ -497,10 +555,10 @@ function ServiceDetailFromContent({
       ) : null}
 
       {faqs.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor} className="py-20">
+        <SectionWrapper background={theme.secondaryColor} className={pad}>
           <FAQSchema faqs={faqs} />
           <div className="mx-auto max-w-3xl">
-            <h2 className="text-center text-3xl font-bold text-gray-900">
+            <h2 className={clsx('text-3xl font-bold text-gray-900', headingAlignClass(design))}>
               Frequently Asked Questions
             </h2>
             <div className="mt-10">
@@ -511,8 +569,8 @@ function ServiceDetailFromContent({
       ) : null}
 
       {content.whyUs ? (
-        <SectionWrapper background="#fff" className="py-20">
-          <div className="mx-auto max-w-3xl text-center">
+        <SectionWrapper background="#fff" className={pad}>
+          <div className={clsx('mx-auto max-w-3xl', headingAlignClass(design))}>
             <h2 className="text-3xl font-bold text-gray-900">Why Choose {site.businessName}</h2>
             <p className="mt-6 text-lg leading-relaxed text-gray-600">{content.whyUs}</p>
           </div>
@@ -520,19 +578,24 @@ function ServiceDetailFromContent({
       ) : null}
 
       {otherServices.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor} className="py-20">
-          <h2 className="mb-10 text-center text-3xl font-bold text-gray-900">
+        <SectionWrapper background={theme.secondaryColor} className={pad}>
+          <h2
+            className={clsx('mb-10 text-3xl font-bold text-gray-900', headingAlignClass(design))}
+          >
             Our Other Services
           </h2>
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className={otherServicesGridClass(design)}>
             {otherServices.map((other) => {
               const otherSlug = slugifyService(other.title || '');
               return (
                 <Link
                   key={other.title}
                   href={`/${slug}/services/${otherSlug}`}
-                  className="group flex flex-col rounded-2xl bg-white p-6 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-                  style={{ borderTop: `4px solid ${theme.accentColor}` }}
+                  className="group flex flex-col bg-white p-6 transition duration-300 hover:-translate-y-1"
+                  style={{
+                    ...cardChromeStyle(),
+                    borderTop: `4px solid ${theme.accentColor}`,
+                  }}
                 >
                   <span style={{ color: theme.accentColor }}>
                     {getIcon(other.icon || 'wrench', 'w-8 h-8')}

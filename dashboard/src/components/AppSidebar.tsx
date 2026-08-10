@@ -8,6 +8,7 @@ import {
   Layout,
   LayoutDashboard,
   Mail,
+  Palette,
   Send,
   PlayCircle,
   Settings2,
@@ -29,6 +30,7 @@ const navItems = [
 
 const phase4NavItems = [
   { to: '/templates', label: 'Templates', icon: Layout },
+  { to: '/designs', label: 'Designs', icon: Palette },
   { to: '/sites', label: 'Generated Sites', icon: Globe },
   { to: '/industry-schemas', label: 'Industry Schemas', icon: Database },
   { to: '/contacts', label: 'Contact Submissions', icon: Mail },

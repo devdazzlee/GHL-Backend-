@@ -18,9 +18,9 @@ const LOCATION_PAGE_SCHEMA = {
   serviceArea:
     '100-150 words about serving this city and nearby areas, naming specific neighborhoods and surrounding communities',
   localStats: {
-    yearsServing: 'reasonable number as string e.g. 10+',
-    customersServed: '200+ or 500+',
-    responseTime: 'specific to industry e.g. Same-day or Within 24 hours',
+    yearsServing: 'ONLY if known for this business — otherwise omit or use empty string. Never invent years.',
+    customersServed: 'ONLY if known — otherwise omit or empty. Never invent customer counts.',
+    responseTime: 'realistic industry response time phrase e.g. Same-day or Within 24 hours',
   },
   process: [
     { step: 'contact step specific to this city, max 6 words', description: '40-50 words' },
@@ -552,4 +552,106 @@ export async function generateLocationPages(siteId, locations) {
       code: 'LOCATION_PAGE_GENERATION_FAILED',
     });
   }
+}
+
+/**
+ * Discover cities within a zip code radius and generate location pages (additive).
+ * Skips cities that already have a page for this site.
+ */
+export async function generateLocationPagesByRadius(siteId, { zipCode, radiusMiles, maxLocations = 8 }) {
+  const zip = String(zipCode ?? '').trim();
+  const radius = Number(radiusMiles);
+  const limit = Math.min(Math.max(Number(maxLocations) || 8, 1), 20);
+
+  if (!/^\d{5}(-\d{4})?$/.test(zip)) {
+    throw new AppError('Field `zipCode` must be a valid US ZIP code.', 400, {
+      code: 'INVALID_BODY',
+    });
+  }
+  if (!Number.isFinite(radius) || radius <= 0 || radius > 100) {
+    throw new AppError('Field `radiusMiles` must be a number between 1 and 100.', 400, {
+      code: 'INVALID_BODY',
+    });
+  }
+
+  const site = await prisma.generatedSite.findUnique({ where: { id: siteId } });
+  if (!site) {
+    throw new AppError('Generated site not found.', 404, { code: 'SITE_NOT_FOUND' });
+  }
+
+  const existingPages = await prisma.locationPage.findMany({
+    where: { siteId },
+    select: { city: true, slug: true },
+  });
+  const existingCities = new Set(existingPages.map((p) => p.city.toLowerCase()));
+
+  const userPrompt = [
+    `Find up to ${limit} real cities or towns within about ${radius} miles of ZIP code ${zip}`,
+    `(primary state context: ${site.state}).`,
+    `This is for a ${site.industry} business based in ${site.city}, ${site.state}.`,
+    'Return ONLY valid JSON:',
+    '{ "locations": [{ "city": "real place name", "county": "accurate county name", "state": "two-letter state", "approxMiles": number }] }',
+    'Use genuine place names inside the radius. Do not invent places.',
+    `Exclude "${site.city}" if it is the same as the business city proper.`,
+    'Order by closest first.',
+  ].join(' ');
+
+  let discovered = [];
+  try {
+    const parsed = await callOpenAi(
+      'You are a US geography assistant. Return only accurate city/county data as JSON.',
+      userPrompt,
+      1200,
+    );
+    discovered = Array.isArray(parsed?.locations) ? parsed.locations : [];
+  } catch (e) {
+    throw new AppError(e?.message ?? 'Failed to discover cities for this ZIP radius.', 502, {
+      code: 'RADIUS_DISCOVERY_FAILED',
+    });
+  }
+
+  const locations = discovered
+    .map((loc) => ({
+      city: String(loc?.city ?? '').trim(),
+      county: String(loc?.county ?? '').trim(),
+      state: String(loc?.state ?? site.state).trim() || site.state,
+    }))
+    .filter((loc) => loc.city && loc.county)
+    .filter((loc) => !existingCities.has(loc.city.toLowerCase()))
+    .slice(0, limit);
+
+  if (locations.length === 0) {
+    throw new AppError(
+      'No new cities found within that radius (or all matches already have pages).',
+      404,
+      { code: 'NO_LOCATIONS_IN_RADIUS' },
+    );
+  }
+
+  console.info(
+    JSON.stringify({
+      event: 'radius_location_pages_start',
+      siteId,
+      zip,
+      radiusMiles: radius,
+      count: locations.length,
+      cities: locations.map((l) => l.city),
+    }),
+  );
+
+  // Create pages one-by-one, skipping conflicts instead of failing the whole batch.
+  const createdPages = [];
+  for (const location of locations) {
+    try {
+      const pages = await generateLocationPages(siteId, [location]);
+      createdPages.push(...pages);
+    } catch (e) {
+      if (e instanceof AppError && e.statusCode === 409) {
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  return createdPages;
 }

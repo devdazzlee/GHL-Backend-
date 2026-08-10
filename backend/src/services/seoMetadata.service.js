@@ -180,7 +180,7 @@ export function composeSeoMetaDescription({
   const baseTemplates = {
     home: `${name} provides trusted ${ind} services in ${place}, ${st}. Serving local homeowners and businesses with professional, reliable solutions.${callToAction}`,
     about: `Learn about ${name}, a locally owned ${ind} company serving ${place}, ${st}. Discover our story, team, and commitment to quality service for every customer.${callToAction}`,
-    services: `Explore ${ind} services from ${name} in ${place}, ${st}. From routine work to complex projects, our licensed team delivers dependable results for local customers.${callToAction}`,
+    services: `Explore ${ind} services from ${name} in ${place}, ${st}. From routine work to complex projects, our local team delivers dependable results for customers nearby.${callToAction}`,
     contact: `Contact ${name} in ${place}, ${st} for ${ind} services. Request a quote, schedule service, or speak with our local team for fast, friendly assistance.${callToAction}`,
     blog: `Read ${ind} tips, guides, and local insights from ${name} in ${place}, ${st}. Stay informed with expert advice for homeowners and businesses in your area.${callToAction}`,
     location: `${name} proudly serves ${loc}, ${st} with professional ${ind} services. Local experts who know the area — reliable service for residents and businesses nearby.${callToAction}`,
@@ -189,7 +189,7 @@ export function composeSeoMetaDescription({
   const templatesByKind = {
     ...baseTemplates,
     service: subject
-      ? `${name} offers professional ${subject.toLowerCase()} in ${place}, ${st}. Licensed local experts delivering dependable results for homeowners and businesses throughout the area.${callToAction}`
+      ? `${name} offers professional ${subject.toLowerCase()} in ${place}, ${st}. Local experts delivering dependable results for homeowners and businesses throughout the area.${callToAction}`
       : baseTemplates.services,
     blogPost: subject
       ? `Read ${subject.toLowerCase()} from ${name} in ${place}, ${st}. Practical ${ind} tips and local guidance for homeowners and businesses in your community.${callToAction}`

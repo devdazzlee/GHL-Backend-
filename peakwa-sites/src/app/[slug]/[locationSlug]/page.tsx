@@ -1,16 +1,28 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Clock, MapPin, Phone, Users } from 'lucide-react';
+import { Clock, MapPin, Users } from 'lucide-react';
+import clsx from 'clsx';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
+import { CtaBanner } from '@/src/components/CtaBanner';
 import { FaqAccordion } from '@/src/components/FaqAccordion';
+import { HeroBanner } from '@/src/components/HeroBanner';
 import { FAQSchema, LocationAreaSchema } from '@/src/components/SchemaMarkup';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
-import { SiteImage } from '@/src/components/SiteImage';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson } from '@/src/lib/content';
-import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
+import { hexToRgb, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite } from '@/src/lib/types';
+import { resolveDesignPreset } from '@/src/designs/presets';
+import {
+  buttonRadiusStyle,
+  cardChromeStyle,
+  headingAlignClass,
+  heroBannerProps,
+  sectionBg,
+  sectionPadClass,
+  valuesGridClass,
+} from '@/src/designs/chrome';
 
 type LocationPageContent = {
   heroHeading?: string;
@@ -82,33 +94,58 @@ export default async function LocationPage({ params }: PageProps) {
 
   const content = parseJson<LocationPageContent>(page.content, {});
   const theme = resolveTheme(site);
+  const design = resolveDesignPreset(site.designVariant);
+  const hero = heroBannerProps(design);
+  const pad = sectionPadClass(design);
   const heroImage = page.imageUrl;
   const heroHeading = resolveHeroHeading(content, site, page.city);
   const heroSubheading = resolveHeroSubheading(content, site, page.city);
-  const heroTextColor = heroImage ? '#FFFFFF' : getTextColor(theme.primaryColor);
 
   const stats = [
-    {
-      icon: Clock,
-      label: 'Years Serving',
-      value: content.localStats?.yearsServing || '10+',
-    },
-    {
-      icon: Users,
-      label: 'Customers Served',
-      value: content.localStats?.customersServed || '500+',
-    },
-    {
-      icon: MapPin,
-      label: 'Response Time',
-      value: content.localStats?.responseTime || 'Same-day',
-    },
-  ];
+    site.yearsInBusiness?.trim() || content.localStats?.yearsServing?.trim()
+      ? {
+          icon: Clock,
+          label: 'Years Serving',
+          value: site.yearsInBusiness?.trim() || content.localStats!.yearsServing!.trim(),
+        }
+      : null,
+    site.customersServed?.trim() || content.localStats?.customersServed?.trim()
+      ? {
+          icon: Users,
+          label: 'Customers Served',
+          value: site.customersServed?.trim() || content.localStats!.customersServed!.trim(),
+        }
+      : null,
+    content.localStats?.responseTime?.trim()
+      ? {
+          icon: MapPin,
+          label: 'Response Time',
+          value: content.localStats.responseTime.trim(),
+        }
+      : {
+          icon: MapPin,
+          label: 'Service Area',
+          value: page.city,
+        },
+  ].filter(Boolean) as Array<{ icon: typeof Clock; label: string; value: string }>;
 
   const processSteps = (content.process ?? []).filter((step) => step.step || step.description);
   const faqs = (content.faqs ?? []).filter(
     (faq): faq is { question: string; answer: string } => Boolean(faq.question && faq.answer),
   );
+
+  // Alternate section backgrounds by design rhythm / family
+  let sectionIndex = 0;
+  const nextSectionBg = (preferSoft = false) => {
+    const role =
+      preferSoft || sectionIndex % 2 === 1
+        ? design.sectionRhythm === 'boldBands' && sectionIndex % 3 === 2
+          ? 'bold'
+          : 'soft'
+        : 'plain';
+    sectionIndex += 1;
+    return sectionBg(design, role, theme);
+  };
 
   return (
     <>
@@ -120,61 +157,45 @@ export default async function LocationPage({ params }: PageProps) {
         locationSlug={locationSlug}
         imageUrl={heroImage}
       />
-      <section className="relative flex min-h-[420px] items-center overflow-hidden md:min-h-[480px]">
-        {heroImage ? (
-          <>
-            <div className="absolute inset-0">
-              <SiteImage
-                src={heroImage}
-                alt={`${site.businessName} serving ${page.city}, ${page.state}`}
-                fill
-                className="object-cover"
-                priority
-                sizes="100vw"
-                fallback={
-                  <div
-                    className="h-full w-full"
-                    style={{ backgroundColor: theme.primaryColor }}
-                  />
-                }
-              />
-            </div>
-            <div
-              className="absolute inset-0"
-              style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.7) }}
-            />
-          </>
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ backgroundColor: theme.primaryColor }}
-          />
-        )}
-        <div
-          className="relative z-10 mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8"
-          style={{ color: heroTextColor }}
-        >
-          <Breadcrumbs site={site} items={[{ label: `${page.city}, ${page.county} County` }]} />
-          <h1 className="mt-6 text-4xl font-bold md:text-5xl">{heroHeading}</h1>
-          {heroSubheading ? (
-            <p className="mt-4 max-w-2xl text-lg opacity-90">{heroSubheading}</p>
-          ) : null}
-        </div>
-      </section>
+      <HeroBanner
+        site={site}
+        heroImage={heroImage}
+        title={heroHeading}
+        subtitle={heroSubheading}
+        compact={hero.compact}
+        centered={hero.centered}
+      >
+        <Breadcrumbs site={site} items={[{ label: `${page.city}, ${page.county} County` }]} />
+      </HeroBanner>
 
       {content.localIntro ? (
-        <SectionWrapper background="#fff">
+        <SectionWrapper background={nextSectionBg(false)} className={pad}>
           <div className="mx-auto max-w-6xl">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">
+            <div className={headingAlignClass(design)}>
+              <h2
+                className={clsx(
+                  'text-3xl text-gray-900 md:text-4xl',
+                  design.family === 'bold' && 'font-bold uppercase tracking-wide',
+                  design.family === 'editorial' && 'font-medium',
+                  design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+                )}
+              >
                 {site.industry.charAt(0).toUpperCase() + site.industry.slice(1)} in {page.city},{' '}
                 {page.state}
               </h2>
               <div
-                className="my-5 h-1 w-14 rounded-full"
+                className={clsx(
+                  'my-5 h-1 w-14 rounded-full',
+                  headingAlignClass(design) === 'text-center' && 'mx-auto',
+                )}
                 style={{ backgroundColor: theme.accentColor }}
               />
-              <p className="max-w-4xl text-base leading-7 text-gray-600 md:text-[17px] md:leading-8">
+              <p
+                className={clsx(
+                  'max-w-4xl text-base leading-7 text-gray-600 md:text-[17px] md:leading-8',
+                  headingAlignClass(design) === 'text-center' && 'mx-auto',
+                )}
+              >
                 {content.localIntro}
               </p>
             </div>
@@ -182,16 +203,21 @@ export default async function LocationPage({ params }: PageProps) {
         </SectionWrapper>
       ) : null}
 
-      <SectionWrapper background={theme.secondaryColor}>
-        <div className="grid gap-6 md:grid-cols-3">
+      <SectionWrapper background={nextSectionBg(true)} className={pad}>
+        <div className={valuesGridClass(design)}>
           {stats.map((stat) => (
             <article
               key={stat.label}
-              className="flex flex-col items-center rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-sm"
+              className="flex flex-col items-center bg-white p-8 text-center"
+              style={cardChromeStyle()}
             >
               <span
-                className="mb-4 inline-flex rounded-full p-3"
-                style={{ backgroundColor: colorWithOpacity(theme.accentColor, 0.12), color: theme.accentColor }}
+                className="mb-4 inline-flex p-3"
+                style={{
+                  backgroundColor: colorWithOpacity(theme.accentColor, 0.12),
+                  color: theme.accentColor,
+                  ...buttonRadiusStyle(),
+                }}
               >
                 <stat.icon className="h-6 w-6" />
               </span>
@@ -203,34 +229,63 @@ export default async function LocationPage({ params }: PageProps) {
       </SectionWrapper>
 
       {content.whyLocal ? (
-        <SectionWrapper background="#fff">
+        <SectionWrapper background={nextSectionBg(false)} className={pad}>
           <div className="mx-auto max-w-6xl">
-            <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">
-              Why {page.city} Residents Choose {site.businessName}
-            </h2>
-            <div
-              className="my-5 h-1 w-14 rounded-full"
-              style={{ backgroundColor: theme.accentColor }}
-            />
-            <p className="max-w-4xl text-base leading-7 text-gray-600 md:text-[17px] md:leading-8">
-              {content.whyLocal}
-            </p>
+            <div className={headingAlignClass(design)}>
+              <h2
+                className={clsx(
+                  'text-3xl text-gray-900 md:text-4xl',
+                  design.family === 'bold' && 'font-bold uppercase tracking-wide',
+                  design.family === 'editorial' && 'font-medium',
+                  design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+                )}
+              >
+                Why {page.city} Residents Choose {site.businessName}
+              </h2>
+              <div
+                className={clsx(
+                  'my-5 h-1 w-14 rounded-full',
+                  headingAlignClass(design) === 'text-center' && 'mx-auto',
+                )}
+                style={{ backgroundColor: theme.accentColor }}
+              />
+              <p
+                className={clsx(
+                  'max-w-4xl text-base leading-7 text-gray-600 md:text-[17px] md:leading-8',
+                  headingAlignClass(design) === 'text-center' && 'mx-auto',
+                )}
+              >
+                {content.whyLocal}
+              </p>
+            </div>
           </div>
         </SectionWrapper>
       ) : null}
 
       {processSteps.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor}>
+        <SectionWrapper background={nextSectionBg(true)} className={pad}>
           <div className="mx-auto max-w-4xl">
-            <h2 className="mb-12 text-center text-3xl font-bold text-gray-900">
+            <h2
+              className={clsx(
+                'mb-12 text-3xl text-gray-900',
+                headingAlignClass(design),
+                design.family === 'bold' && 'font-bold uppercase tracking-wide',
+                design.family === 'editorial' && 'font-medium',
+                design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+              )}
+            >
               How We Serve {page.city}
             </h2>
-            <div className="grid gap-8 md:grid-cols-3">
+            <div className={valuesGridClass(design)}>
               {processSteps.map((step, index) => (
-                <article key={`${step.step}-${index}`} className="rounded-2xl bg-white p-8 shadow-sm">
+                <article
+                  key={`${step.step}-${index}`}
+                  className="bg-white p-8"
+                  style={cardChromeStyle()}
+                >
                   <span
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-                    style={{ backgroundColor: theme.accentColor }}
+                    className="inline-flex h-10 w-10 items-center justify-center text-sm font-bold text-white"
+                    style={{ backgroundColor: theme.accentColor, ...buttonRadiusStyle() }}
                   >
                     {index + 1}
                   </span>
@@ -244,19 +299,44 @@ export default async function LocationPage({ params }: PageProps) {
       ) : null}
 
       {content.serviceArea ? (
-        <SectionWrapper background="#fff">
+        <SectionWrapper background={nextSectionBg(false)} className={pad}>
           <div className="mx-auto max-w-3xl">
-            <h2 className="text-3xl font-bold text-gray-900">Areas We Serve Near {page.city}</h2>
-            <p className="mt-8 text-lg leading-relaxed text-gray-600">{content.serviceArea}</p>
+            <h2
+              className={clsx(
+                'text-3xl text-gray-900',
+                headingAlignClass(design),
+                design.family === 'bold' && 'font-bold uppercase tracking-wide',
+                design.family === 'editorial' && 'font-medium',
+                design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+              )}
+            >
+              Areas We Serve Near {page.city}
+            </h2>
+            <p
+              className={clsx(
+                'mt-8 text-lg leading-relaxed text-gray-600',
+                headingAlignClass(design),
+              )}
+            >
+              {content.serviceArea}
+            </p>
           </div>
         </SectionWrapper>
       ) : null}
 
       {faqs.length > 0 ? (
-        <SectionWrapper background={theme.secondaryColor}>
+        <SectionWrapper background={nextSectionBg(true)} className={pad}>
           <FAQSchema faqs={faqs} />
           <div className="mx-auto max-w-3xl">
-            <h2 className="mb-8 text-center text-3xl font-bold text-gray-900">
+            <h2
+              className={clsx(
+                'mb-8 text-3xl text-gray-900',
+                headingAlignClass(design),
+                design.family === 'bold' && 'font-bold uppercase tracking-wide',
+                design.family === 'editorial' && 'font-medium',
+                design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
+              )}
+            >
               Frequently Asked Questions — {page.city}
             </h2>
             <FaqAccordion faqs={faqs} accentColor={theme.accentColor} />
@@ -264,35 +344,12 @@ export default async function LocationPage({ params }: PageProps) {
         </SectionWrapper>
       ) : null}
 
-      <SectionWrapper background={theme.primaryColor} className="py-16 md:py-16">
-        <div className="text-center" style={{ color: getTextColor(theme.primaryColor) }}>
-          <h2 className="text-3xl font-bold md:text-4xl">
-            Ready to Get Started in {page.city}?
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-lg opacity-90">
-            Contact {site.businessName} today for trusted {site.industry} services in {page.city},{' '}
-            {page.state}.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href={`/${site.slug}/contact`}
-              className="rounded-full px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
-              style={{ backgroundColor: '#fff', color: theme.primaryColor }}
-            >
-              Contact Us
-            </a>
-            {site.phone ? (
-              <a
-                href={`tel:${site.phone}`}
-                className="inline-flex items-center gap-2 text-sm font-semibold opacity-90 hover:opacity-100"
-              >
-                <Phone className="h-4 w-4" />
-                {site.phone}
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </SectionWrapper>
+      <CtaBanner
+        site={site}
+        heading={content.cta?.heading || `Ready to Get Started in ${page.city}?`}
+        subtext={`Contact ${site.businessName} today for trusted ${site.industry} services in ${page.city}, ${page.state}.`}
+        buttonText={content.cta?.buttonText || 'Contact Us'}
+      />
     </>
   );
 }

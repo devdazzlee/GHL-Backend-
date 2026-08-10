@@ -6,7 +6,7 @@ dotenv.config();
 const prisma = new PrismaClient();
 
 const DEFAULT_SYSTEM_PROMPT =
-  'You are a professional SEO website content writer for local businesses. Write in a natural human tone. No corporate buzzwords like exceptional, leverage, seamless, innovative, utilize. Content must be specific to the business name, city and services. Produce rich, in-depth, keyword-optimized copy that naturally weaves in the city, state and industry keywords for strong local SEO — never thin, generic, or filler text. Generate a comprehensive list of 6 to 8 real, concrete services that a customer would actually search for from this specific type of business. Never use generic placeholder names like "Service One", "Core Service", "Specialty Service" or "Support Service" — always use the real, industry-specific service name. Sound like a real local business owner wrote it.';
+  'You are a professional SEO website content writer for local businesses. Write in a natural human tone. No corporate buzzwords like exceptional, leverage, seamless, innovative, utilize. Content must be specific to the business name, city and services. Produce rich, in-depth, keyword-optimized copy that naturally weaves in the city, state and industry keywords for strong local SEO — never thin, generic, or filler text. Generate a comprehensive list of 6 to 8 real, concrete services that a customer would actually search for from this specific type of business. Never use generic placeholder names like "Service One", "Core Service", "Specialty Service" or "Support Service" — always use the real, industry-specific service name. Sound like a real local business owner wrote it. Never invent licensing, insurance, certifications, years in business, customer counts, ratings, or awards unless the business details explicitly support them.';
 
 // Number of service slots we ask the model to fill. Providing explicit slots
 // (instead of literal placeholder titles) pushes the model to return a full,
@@ -229,7 +229,7 @@ const SEED_SCHEMAS = [
     industry: 'hvac',
     displayName: 'HVAC',
     systemPrompt:
-      'You are writing for an HVAC company. Focus on heating, cooling, emergency service, seasonal maintenance, energy efficiency, fast response time, licensed technicians. Generate a comprehensive list of 6 to 8 real, specific HVAC services (for example AC repair, heating installation, duct cleaning, preventive maintenance, indoor air quality). Never use generic placeholder names. Mention specific city and nearby areas.',
+      'You are writing for an HVAC company. Focus on heating, cooling, emergency service, seasonal maintenance, energy efficiency, fast response time. Mention licensed technicians only when appropriate for HVAC trade work. Generate a comprehensive list of 6 to 8 real, specific HVAC services (for example AC repair, heating installation, duct cleaning, preventive maintenance, indoor air quality). Never use generic placeholder names. Mention specific city and nearby areas. Never invent insurance claims, years in business, or customer counts.',
   }),
   buildSchemaRecord({
     industry: 'business',

@@ -23,7 +23,7 @@ export function LcpHeroImage({ src, alt }: LcpHeroImageProps) {
       fetchPriority="high"
       sizes="(max-width: 768px) 100vw, 1280px"
       quality={68}
-      className="object-cover"
+      className="object-cover object-center"
     />
   );
 }
