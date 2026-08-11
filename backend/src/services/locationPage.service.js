@@ -5,18 +5,25 @@ import { AppError } from '../utils/AppError.js';
 import { getSchemaForIndustry } from './industrySchema.service.js';
 import { fetchPexelsImageByQuery } from './pexels.service.js';
 import { buildSeoRequirements, ensureSeoMetadata } from './seoMetadata.service.js';
+import {
+  FLOORS,
+  TARGETS,
+  LENGTH_CRITICAL_TEMPERATURE,
+  LENGTH_PRIORITY_PREAMBLE,
+  countWords,
+  validateUnit,
+} from './contentContract.js';
+import { ContentUnitError, generateUnit } from './contentUnit.runner.js';
+import { attachSeoExtra, buildSeoExtraLinkTargets } from './seoExtra.service.js';
 
 const OPENAI_CONTENT_MODEL = 'gpt-4o';
 
 const LOCATION_PAGE_SCHEMA = {
   heroHeading: 'city name included, max 10 words',
   heroSubheading: 'city and service mention, max 20 words',
-  localIntro:
-    '200-250 words specific to this city with local landmarks, neighborhoods, community details, and industry keywords woven in naturally',
-  whyLocal:
-    '150-200 words on why this business is the best choice for residents of this city, with local and industry keywords',
-  serviceArea:
-    '100-150 words about serving this city and nearby areas, naming specific neighborhoods and surrounding communities',
+  localIntro: `${TARGETS.locationLocalIntro.min}-${TARGETS.locationLocalIntro.max} words specific to this city with local landmarks, neighborhoods, community details, and industry keywords (HARD MINIMUM ${FLOORS.locationLocalIntro})`,
+  whyLocal: `${TARGETS.locationWhyLocal.min}-${TARGETS.locationWhyLocal.max} words on why this business is the best choice for residents of this city (HARD MINIMUM ${FLOORS.locationWhyLocal})`,
+  serviceArea: `${TARGETS.locationServiceArea.min}-${TARGETS.locationServiceArea.max} words about serving this city and nearby areas (HARD MINIMUM ${FLOORS.locationServiceArea})`,
   localStats: {
     yearsServing: 'ONLY if known for this business — otherwise omit or use empty string. Never invent years.',
     customersServed: 'ONLY if known — otherwise omit or empty. Never invent customer counts.',
@@ -30,15 +37,15 @@ const LOCATION_PAGE_SCHEMA = {
   faqs: [
     {
       question: 'Do you serve the city area question mentioning city name',
-      answer: '50-60 words mentioning neighborhoods and service area',
+      answer: `${TARGETS.faqAnswer.min}-${TARGETS.faqAnswer.max} words mentioning neighborhoods and service area`,
     },
     {
       question: 'How quickly can you reach the city question',
-      answer: '50-60 words with realistic response time for this industry',
+      answer: `${TARGETS.faqAnswer.min}-${TARGETS.faqAnswer.max} words with realistic response time for this industry`,
     },
     {
       question: 'What industry services are available in the city question',
-      answer: '50-60 words listing specific services offered in this city',
+      answer: `${TARGETS.faqAnswer.min}-${TARGETS.faqAnswer.max} words listing specific services offered in this city`,
     },
   ],
   seo: {
@@ -46,12 +53,6 @@ const LOCATION_PAGE_SCHEMA = {
     metaDescription:
       '120-155 characters including city, state, industry keywords, and call to action (minimum 120)',
   },
-};
-
-const FIELD_MIN_WORDS = {
-  localIntro: 200,
-  whyLocal: 150,
-  serviceArea: 100,
 };
 
 const DEFAULT_LOCATION_COUNT = 6;
@@ -64,11 +65,6 @@ function slugify(...parts) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-function countWords(text) {
-  if (!text || typeof text !== 'string') return 0;
-  return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
 function validateLocations(locations) {
@@ -153,16 +149,16 @@ async function callOpenAi(systemPrompt, userPrompt, maxTokens = 4500) {
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create({
     model: OPENAI_CONTENT_MODEL,
-    temperature: 0.7,
+    temperature: LENGTH_CRITICAL_TEMPERATURE,
     max_tokens: maxTokens,
     response_format: { type: 'json_object' },
     messages: [
       {
         role: 'system',
         content:
-          'You are a professional SEO content writer for local business location landing pages. Write natural, keyword-optimized copy specific to each city. Always return valid JSON only.',
+          'You are a professional SEO content writer for local business location landing pages. Write natural, keyword-optimized copy specific to each city. Word counts are HARD REQUIREMENTS. Always return valid JSON only.',
       },
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: `${LENGTH_PRIORITY_PREAMBLE}\n\n${userPrompt}` },
     ],
   });
 
@@ -174,99 +170,21 @@ async function callOpenAi(systemPrompt, userPrompt, maxTokens = 4500) {
   return JSON.parse(raw);
 }
 
-async function expandLocationField(businessData, location, fieldName, label, currentText, minWords, maxWords) {
+async function generateLocationPageContent(businessData, location, site, systemPrompt) {
   const { businessName, industry } = businessData;
   const targetCity = location.city;
   const targetState = location.state;
 
-  const userPrompt = [
-    `Rewrite and expand this ${label} for ${businessName}, a ${industry} business serving ${targetCity}, ${targetState}.`,
-    buildLocationSeoRequirements({ businessName, industry, city: targetCity, state: targetState }),
-    `Current draft (${countWords(currentText)} words): "${currentText}"`,
-    `Return ONLY valid JSON: { "${fieldName}": "${minWords}-${maxWords} words of expanded, keyword-optimized, locally specific content" }`,
-    `The ${fieldName} MUST be at least ${minWords} words.`,
+  const shellPrompt = [
+    buildLocationPagePrompt(businessData, location, site, systemPrompt),
+    'For localIntro, whyLocal, and serviceArea write one short placeholder sentence each — those fields are filled by a separate contract unit.',
   ].join(' ');
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const parsed = await callOpenAi('', userPrompt, 1200);
-      const text = parsed?.[fieldName];
-      if (countWords(text) >= minWords) {
-        return text;
-      }
-      if (attempt === 2) {
-        return text || currentText;
-      }
-    } catch (e) {
-      if (attempt === 2) {
-        console.warn(
-          JSON.stringify({
-            event: 'location_field_expand_failed',
-            fieldName,
-            city: targetCity,
-            error: e?.message ?? String(e),
-            businessName,
-          }),
-        );
-      }
-    }
-  }
-
-  return currentText;
-}
-
-const EXPANSION_LABELS = {
-  localIntro: 'location page local introduction',
-  whyLocal: 'location page why choose us locally section',
-  serviceArea: 'location page service area description',
-};
-
-async function ensureLocationPageLength(content, businessData, location) {
-  const result = { ...content };
-
-  await Promise.all(
-    Object.entries(FIELD_MIN_WORDS).map(async ([fieldName, minWords]) => {
-      const currentText = result[fieldName];
-      if (!currentText || countWords(currentText) >= minWords) {
-        return;
-      }
-
-      const maxWords = fieldName === 'localIntro' ? 250 : fieldName === 'whyLocal' ? 200 : 150;
-      result[fieldName] = await expandLocationField(
-        businessData,
-        location,
-        fieldName,
-        EXPANSION_LABELS[fieldName],
-        currentText,
-        minWords,
-        maxWords,
-      );
-    }),
-  );
-
-  return result;
-}
-
-function validateLocationContent(content) {
-  const issues = [];
-  for (const [field, minimum] of Object.entries(FIELD_MIN_WORDS)) {
-    const words = countWords(content?.[field]);
-    if (words > 0 && words < minimum) {
-      issues.push({ field, words, minimum });
-    }
-  }
-  return issues;
-}
-
-async function generateLocationPageContent(businessData, location, site, systemPrompt) {
-  const userPrompt = buildLocationPagePrompt(businessData, location, site, systemPrompt);
-
-  let content;
+  let shell;
   let lastError;
-
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      content = await callOpenAi(systemPrompt, userPrompt, 4500);
+      shell = await callOpenAi(systemPrompt, shellPrompt, 2500);
       break;
     } catch (e) {
       lastError = e;
@@ -282,24 +200,58 @@ async function generateLocationPageContent(businessData, location, site, systemP
     }
   }
 
-  if (!content) {
+  if (!shell) {
     throw lastError ?? new Error(`Failed to generate location page for ${location.city}`);
   }
 
-  content = await ensureLocationPageLength(content, businessData, location);
+  const fields = await generateUnit({
+    unitId: 'location.fields',
+    systemPrompt:
+      systemPrompt ||
+      'You write hyper-local SEO copy. Word counts are HARD REQUIREMENTS.',
+    userPrompt: [
+      `Write localIntro, whyLocal, and serviceArea for ${businessName} (${industry}) targeting ${targetCity}, ${targetState}.`,
+      buildLocationSeoRequirements({
+        businessName,
+        industry,
+        city: targetCity,
+        state: targetState,
+      }),
+      'Return ONLY JSON:',
+      `{ "localIntro": "${TARGETS.locationLocalIntro.min}-${TARGETS.locationLocalIntro.max} words", "whyLocal": "${TARGETS.locationWhyLocal.min}-${TARGETS.locationWhyLocal.max} words", "serviceArea": "${TARGETS.locationServiceArea.min}-${TARGETS.locationServiceArea.max} words" }`,
+      `HARD MINIMUMS: localIntro ${FLOORS.locationLocalIntro}, whyLocal ${FLOORS.locationWhyLocal}, serviceArea ${FLOORS.locationServiceArea}.`,
+    ].join(' '),
+    maxTokens: 2000,
+    temperature: LENGTH_CRITICAL_TEMPERATURE,
+  });
+
+  let content = {
+    ...shell,
+    localIntro: fields.localIntro,
+    whyLocal: fields.whyLocal,
+    serviceArea: fields.serviceArea,
+  };
 
   content = await ensureSeoMetadata(content, businessData, 'location', systemPrompt, {
     locationCity: location.city,
   });
 
-  const remaining = validateLocationContent(content);
-  if (remaining.length > 0) {
+  content = await attachSeoExtra('location', content, businessData, systemPrompt, {
+    locationCity: location.city,
+    locationSlug: location.slug || location.city,
+    linkTargets: buildSeoExtraLinkTargets({
+      pageKind: 'location',
+      locationSlug: location.slug || location.city,
+    }),
+  });
+
+  const { ok, issues } = validateUnit('location.fields', content);
+  if (!ok) {
     console.warn(
       JSON.stringify({
-        event: 'location_page_length_below_minimum',
+        event: 'location_page_contract_warning',
         city: location.city,
-        issues: remaining,
-        businessName: businessData?.businessName,
+        issues,
       }),
     );
   }

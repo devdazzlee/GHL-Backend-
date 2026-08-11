@@ -5,11 +5,14 @@ import clsx from 'clsx';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { HeroBanner } from '@/src/components/HeroBanner';
+import { AboutPageJsonLd } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type AboutContent } from '@/src/lib/content';
+import { parseJson, type AboutContent, type ServicesContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset } from '@/src/designs/presets';
 
@@ -43,6 +46,7 @@ export default async function AboutPage({ params }: PageProps) {
 
   const images = await getSiteImages(slug);
   const content = parseJson<AboutContent>(site.aboutContent, {});
+  const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
   const hero = content.hero ?? {};
@@ -75,6 +79,17 @@ export default async function AboutPage({ params }: PageProps) {
 
   return (
     <>
+      <AboutPageJsonLd
+        site={site}
+        description={
+          content.seo?.metaDescription ||
+          story.paragraph1 ||
+          story.paragraph2 ||
+          site.description ||
+          undefined
+        }
+        breadcrumbItems={[{ label: 'About' }]}
+      />
       <HeroBanner
         site={site}
         heroImage={images.hero}
@@ -87,7 +102,7 @@ export default async function AboutPage({ params }: PageProps) {
           design.family === 'editorial'
         }
       >
-        <Breadcrumbs site={site} items={[{ label: 'About' }]} />
+        <Breadcrumbs site={site} skipSchema items={[{ label: 'About' }]} />
       </HeroBanner>
 
       <SectionWrapper background="#fff" className={sectionPad}>
@@ -328,6 +343,18 @@ export default async function AboutPage({ params }: PageProps) {
           </div>
         </SectionWrapper>
       ) : null}
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        currentPath="about"
+        relatedLinks={[
+          { label: 'All services', href: 'services' },
+          ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
+          { label: 'Get in touch', href: 'contact' },
+          { label: 'Read the blog', href: 'blog' },
+        ]}
+      />
     </>
   );
 }

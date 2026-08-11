@@ -1,11 +1,20 @@
 export type SeoContent = { title?: string; metaDescription?: string };
 
+/** Bottom-of-page keyword SEO block (generated on every marketing page). */
+export type SeoExtraContent = {
+  heading?: string;
+  paragraphs?: string[];
+  links?: Array<{ label?: string; href?: string }>;
+  faqs?: Array<{ question?: string; answer?: string }>;
+};
+
 export type HomeContent = {
   hero?: { heading?: string; subheading?: string; ctaButton?: string };
   about?: { heading?: string; paragraph1?: string; paragraph2?: string };
   services?: Array<{ title?: string; description?: string; icon?: string }>;
   whyChooseUs?: Array<{ point?: string; detail?: string }>;
   cta?: { heading?: string; subtext?: string; buttonText?: string };
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 
@@ -15,6 +24,7 @@ export type AboutContent = {
   team?: { heading?: string; description?: string };
   mission?: { heading?: string; statement?: string };
   values?: Array<{ title?: string; description?: string }>;
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 
@@ -28,6 +38,7 @@ export type ServicesContent = {
     icon?: string;
   }>;
   cta?: { heading?: string; buttonText?: string };
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 
@@ -37,12 +48,21 @@ export type ContactContent = {
   formHeading?: string;
   addressSection?: { heading?: string };
   hoursSection?: { heading?: string; description?: string };
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 
-export type BlogSection = { heading?: string; paragraphs?: string[] };
+export type BlogSubsection = { heading?: string; paragraphs?: string[] };
+
+export type BlogSection = {
+  heading?: string;
+  paragraphs?: string[];
+  subsections?: BlogSubsection[];
+};
 
 export type BlogFaq = { question?: string; answer?: string };
+
+export type BlogInternalLink = { label?: string; path?: string };
 
 export type BlogPost = {
   title?: string;
@@ -55,11 +75,13 @@ export type BlogPost = {
   sections?: BlogSection[];
   conclusion?: string;
   faqs?: BlogFaq[];
+  internalLinks?: BlogInternalLink[];
   seo?: SeoContent;
 };
 
 export type BlogContent = {
   posts?: BlogPost[];
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 
@@ -69,6 +91,7 @@ export type LocationContent = {
   whyLocal?: string;
   serviceArea?: string;
   cta?: { heading?: string; buttonText?: string };
+  seoExtra?: SeoExtraContent;
   seo?: SeoContent;
 };
 

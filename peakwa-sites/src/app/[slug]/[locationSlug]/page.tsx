@@ -8,9 +8,11 @@ import { CtaBanner } from '@/src/components/CtaBanner';
 import { FaqAccordion } from '@/src/components/FaqAccordion';
 import { HeroBanner } from '@/src/components/HeroBanner';
 import { FAQSchema, LocationAreaSchema } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
-import { parseJson } from '@/src/lib/content';
+import { parseJson, type SeoExtraContent, type ServicesContent } from '@/src/lib/content';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { hexToRgb, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite } from '@/src/lib/types';
 import { resolveDesignPreset } from '@/src/designs/presets';
@@ -40,6 +42,7 @@ type LocationPageContent = {
   process?: Array<{ step?: string; description?: string }>;
   faqs?: Array<{ question?: string; answer?: string }>;
   seo?: { title?: string; metaDescription?: string };
+  seoExtra?: SeoExtraContent;
   /** @deprecated Legacy CTA format */
   cta?: { heading?: string; buttonText?: string };
 };
@@ -93,6 +96,7 @@ export default async function LocationPage({ params }: PageProps) {
   if (!page) notFound();
 
   const content = parseJson<LocationPageContent>(page.content, {});
+  const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
   const hero = heroBannerProps(design);
@@ -343,6 +347,19 @@ export default async function LocationPage({ params }: PageProps) {
           </div>
         </SectionWrapper>
       ) : null}
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        showFaqs={false}
+        currentPath={locationSlug}
+        relatedLinks={[
+          { label: 'Back to home', href: '' },
+          { label: 'All services', href: 'services' },
+          ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
+          { label: 'Get in touch', href: 'contact' },
+        ]}
+      />
 
       <CtaBanner
         site={site}

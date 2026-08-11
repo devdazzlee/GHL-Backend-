@@ -5,7 +5,8 @@ import { notFound } from 'next/navigation';
 import clsx from 'clsx';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
-import { ArticleSchema, FAQSchema } from '@/src/components/SchemaMarkup';
+import { BlogPostJsonLd } from '@/src/components/SchemaMarkup';
+import { FaqAccordion } from '@/src/components/FaqAccordion';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
@@ -14,7 +15,6 @@ import { getSiteImages } from '@/src/lib/images';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset } from '@/src/designs/presets';
 import {
-  cardChromeStyle,
   contentMaxClass,
   sectionPadClass,
 } from '@/src/designs/chrome';
@@ -91,18 +91,24 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   return (
     <>
-      <ArticleSchema
+      <BlogPostJsonLd
         title={post.title || ''}
         excerpt={post.excerpt || ''}
         businessName={site.businessName}
         slug={slug}
         postIndex={index}
+        site={site}
+        faqs={faqs}
+        breadcrumbItems={[
+          { label: 'Blog', href: `/${slug}/blog` },
+          { label: post.title || 'Article' },
+        ]}
       />
-      <FAQSchema faqs={faqs} />
       <SectionWrapper background="#fff" className={sectionPadClass(design)}>
         <div className={contentMaxClass(design)}>
           <Breadcrumbs
             site={site}
+            skipSchema
             items={[
               { label: 'Blog', href: `/${slug}/blog` },
               { label: post.title || 'Article' },
@@ -181,6 +187,22 @@ export default async function BlogPostPage({ params }: PageProps) {
                       {paragraph}
                     </p>
                   ))}
+                {(section.subsections ?? []).map((subsection, k) => (
+                  <div key={`sub-${i}-${k}`} className="mb-6 ml-0 md:ml-1">
+                    {subsection.heading ? (
+                      <h3 className={clsx('mb-3 mt-6 text-xl text-gray-900', headingClass)}>
+                        {subsection.heading}
+                      </h3>
+                    ) : null}
+                    {(subsection.paragraphs ?? [])
+                      .filter((p) => p?.trim())
+                      .map((paragraph, j) => (
+                        <p key={`sp-${i}-${k}-${j}`} className="mb-4 text-lg leading-relaxed">
+                          {paragraph}
+                        </p>
+                      ))}
+                  </div>
+                ))}
               </section>
             ))}
 
@@ -197,24 +219,39 @@ export default async function BlogPostPage({ params }: PageProps) {
             ) : null}
           </article>
 
+          {Array.isArray(post.internalLinks) && post.internalLinks.length > 0 ? (
+            <section className="mt-12">
+              <div className="mb-6 h-px w-full bg-gray-200" />
+              <h2 className={clsx('text-2xl text-gray-900', headingClass)}>Explore more</h2>
+              <ul className="mt-4 space-y-2">
+                {post.internalLinks
+                  .filter((link) => link?.label && link?.path)
+                  .map((link, i) => {
+                    const pathKey = String(link.path).replace(/^\/+|\/+$/g, '');
+                    const href = `/${slug}/${pathKey}`;
+                    return (
+                      <li key={`il-${i}`}>
+                        <Link
+                          href={href}
+                          className="text-lg font-semibold hover:underline"
+                          style={{ color: theme.accentColor }}
+                        >
+                          {link.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </section>
+          ) : null}
+
           {faqs.length > 0 ? (
             <section className="mt-12">
               <div className="mb-8 h-px w-full bg-gray-200" />
-              <h2 className={clsx('text-2xl text-gray-900', headingClass)}>
+              <h2 className={clsx('mb-6 text-2xl text-gray-900', headingClass)}>
                 Frequently Asked Questions
               </h2>
-              <div className="mt-6 space-y-4">
-                {faqs.map((faq, i) => (
-                  <div
-                    key={`faq-${i}`}
-                    className="bg-white p-6"
-                    style={cardChromeStyle()}
-                  >
-                    <p className="font-bold text-gray-900">{faq.question}</p>
-                    <p className="mt-2 leading-relaxed text-gray-600">{faq.answer}</p>
-                  </div>
-                ))}
-              </div>
+              <FaqAccordion faqs={faqs} accentColor={theme.accentColor} />
             </section>
           ) : null}
         </div>

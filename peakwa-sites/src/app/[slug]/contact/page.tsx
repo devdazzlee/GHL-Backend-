@@ -6,10 +6,13 @@ import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { ContactForm } from '@/src/components/ContactForm';
 import { HeroBanner } from '@/src/components/HeroBanner';
+import { ContactPageJsonLd } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type ContactContent } from '@/src/lib/content';
+import { parseJson, type ContactContent, type ServicesContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite } from '@/src/lib/types';
 import { resolveDesignPreset } from '@/src/designs/presets';
@@ -39,6 +42,7 @@ export default async function ContactPage({ params }: PageProps) {
 
   const images = await getSiteImages(slug);
   const content = parseJson<ContactContent>(site.contactContent, {});
+  const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
 
@@ -54,6 +58,11 @@ export default async function ContactPage({ params }: PageProps) {
 
   return (
     <>
+      <ContactPageJsonLd
+        site={site}
+        description={content.seo?.metaDescription || content.intro || undefined}
+        breadcrumbItems={[{ label: 'Contact' }]}
+      />
       <HeroBanner
         site={site}
         heroImage={images.hero}
@@ -62,7 +71,7 @@ export default async function ContactPage({ params }: PageProps) {
         compact={design.heroLayout === 'compact' || design.family === 'utility'}
         centered={stacked}
       >
-        <Breadcrumbs site={site} items={[{ label: 'Contact' }]} />
+        <Breadcrumbs site={site} skipSchema items={[{ label: 'Contact' }]} />
       </HeroBanner>
 
       <SectionWrapper
@@ -173,6 +182,18 @@ export default async function ContactPage({ params }: PageProps) {
           </a>
         </div>
       </SectionWrapper>
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        currentPath="contact"
+        relatedLinks={[
+          { label: 'All services', href: 'services' },
+          ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
+          { label: 'Our story', href: 'about' },
+          { label: 'Read the blog', href: 'blog' },
+        ]}
+      />
     </>
   );
 }

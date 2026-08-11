@@ -5,6 +5,19 @@ import { AppError } from '../utils/AppError.js';
 import { getSchemaForIndustry } from './industrySchema.service.js';
 import { buildSeoRequirements, ensureSeoMetadata } from './seoMetadata.service.js';
 import { pickDesignVariant } from './designVariant.service.js';
+import {
+  FLOORS,
+  STRUCTURE,
+  TARGETS,
+  LENGTH_CRITICAL_TEMPERATURE,
+  LENGTH_PRIORITY_PREAMBLE,
+  buildBlogBodyScaffold,
+  buildServicesIntroScaffold,
+  buildContactIntroScaffold,
+  validatePageLength,
+} from './contentContract.js';
+import { ContentUnitError, generateUnit, mapPool } from './contentUnit.runner.js';
+import { attachSeoExtra } from './seoExtra.service.js';
 
 const DEFAULT_THEME = {
   primaryColor: '#1F2937',
@@ -29,7 +42,7 @@ const MAX_TOKENS_BY_PAGE = {
   home: 4500,
   about: 4500,
   services: 8000,
-  contact: 2500,
+  contact: 4500,
   blog: 12000,
   location: 3500,
 };
@@ -267,7 +280,7 @@ function buildPagePrompt(businessData, pageSchema, pageType, contextNote = '') {
 
   const blogInstruction =
     pageType === 'blog'
-      ? ' Write three distinct, in-depth articles. Each post must total 400-500 words across its introduction, section paragraphs, and conclusion (FAQs are separate). Include specific tips, concrete examples, and local relevance to this city. Every post needs a distinct topic, an engaging introduction, two substantive sections with descriptive headings, a conclusion, and three real FAQs a customer would actually ask. Do not repeat points across posts, and avoid filler.'
+      ? ' Write three distinct, in-depth articles. Each post body (introduction + H2/H3 section paragraphs + conclusion) MUST total at least 1000 words (target 1100+). Every post needs: introduction, exactly 4 H2 sections each with at least one H3 subsection, conclusion, exactly 5 FAQs with answers of 70-90 words each (hard minimum 60, never one-sentence answers), and 3 internalLinks (services/about/contact). Word counts are HARD REQUIREMENTS. Include specific tips, concrete examples, and local relevance to this city. Do not repeat points across posts, and avoid filler.'
       : '';
 
   const seoRequirements = buildSeoRequirements(businessData);
@@ -275,17 +288,17 @@ function buildPagePrompt(businessData, pageSchema, pageType, contextNote = '') {
   const accuracyRules =
     ' Accuracy rules: Never invent licensing, insurance, certifications, years in business, customer counts, ratings, or awards unless the business description explicitly states them. Do not claim the business is licensed or insured unless that is standard and required for this specific industry AND the description supports it. Prefer honest local-service language over unverifiable claims.';
 
-  return `Generate ${pageType} page content for ${businessName}, a ${industry} business in ${city}, ${state}. ${details}${servicesInstruction}${blogInstruction}${seoRequirements}${accuracyRules} Return ONLY valid JSON matching this exact structure: ${pageSchema}. For every field with a word range, treat the lower number as a strict minimum you must reach; keep short fields (headings, buttons, titles) within their limits. Content must be specific to this business and city.`;
+  return `${LENGTH_PRIORITY_PREAMBLE} Generate ${pageType} page content for ${businessName}, a ${industry} business in ${city}, ${state}. ${details}${servicesInstruction}${blogInstruction}${seoRequirements}${accuracyRules} Return ONLY valid JSON matching this exact structure: ${pageSchema}. For every field with a word range, treat the lower number as a strict minimum you must reach; keep short fields (headings, buttons, titles) within their limits. Content must be specific to this business and city.`;
 }
 
 async function finalizePageContent(pageType, content, businessData, systemPrompt) {
-  const withLength = await ensureMinimumContentLength(
-    pageType,
-    content,
-    businessData,
-    systemPrompt,
-  );
-  const withPageSeo = await ensureSeoMetadata(withLength, businessData, pageType, systemPrompt);
+  // Drop any thin seoExtra the shell/schema model may have embedded — unit path owns it.
+  const { seoExtra: _shellSeoExtra, ...withoutShellExtra } = content || {};
+  const withExtra = await attachSeoExtra(pageType, withoutShellExtra, businessData, systemPrompt, {
+    services: content?.services,
+  });
+  assertPageMeetsContract(pageType, withExtra);
+  const withPageSeo = await ensureSeoMetadata(withExtra, businessData, pageType, systemPrompt);
 
   if (pageType !== 'blog' || !Array.isArray(withPageSeo.posts)) {
     return withPageSeo;
@@ -307,16 +320,32 @@ async function finalizePageContent(pageType, content, businessData, systemPrompt
   return { ...withPageSeo, posts };
 }
 
-async function callOpenAiForPage(systemPrompt, userPrompt, maxTokens = 2500) {
+function assertPageMeetsContract(pageType, content) {
+  const issues = validatePageLength(pageType, content);
+  if (issues.length === 0) return;
+  // Units are responsible for meeting floors; log if something slipped through compose.
+  console.warn(
+    JSON.stringify({
+      event: 'page_contract_warning_after_compose',
+      pageType,
+      issues,
+    }),
+  );
+}
+
+async function callOpenAiForPage(systemPrompt, userPrompt, maxTokens = 2500, options = {}) {
   const apiKey = env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new AppError('OpenAI is not configured.', 503, { code: 'OPENAI_NOT_CONFIGURED' });
   }
 
+  const temperature =
+    typeof options.temperature === 'number' ? options.temperature : 0.7;
+
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create({
     model: OPENAI_CONTENT_MODEL,
-    temperature: 0.7,
+    temperature,
     max_tokens: maxTokens,
     response_format: { type: 'json_object' },
     messages: [
@@ -325,116 +354,32 @@ async function callOpenAiForPage(systemPrompt, userPrompt, maxTokens = 2500) {
     ],
   });
 
-  const raw = completion.choices[0]?.message?.content?.trim();
+  const choice = completion.choices[0];
+  const finishReason = choice?.finish_reason;
+  const raw = choice?.message?.content?.trim();
   if (!raw) {
     throw new Error('OpenAI returned empty content');
   }
 
+  if (finishReason === 'length') {
+    console.warn(
+      JSON.stringify({
+        event: 'openai_output_truncated',
+        scope: options.scope || 'page',
+        completionTokens: completion.usage?.completion_tokens ?? null,
+      }),
+    );
+  }
+
+  if (options.returnMeta) {
+    return {
+      raw,
+      finishReason,
+      completionTokens: completion.usage?.completion_tokens ?? null,
+    };
+  }
+
   return raw;
-}
-
-/**
- * Generates a single long-form text field in its own completion so the model
- * can reliably reach SEO word targets without compressing a full page JSON blob.
- */
-async function expandTextField(
-  businessData,
-  systemPrompt,
-  { label, currentText, minWords, maxWords, contextNote = '' },
-) {
-  const { businessName, industry, city, state } = businessData;
-
-  const userPrompt = [
-    `Rewrite and expand this ${label} for ${businessName}, a ${industry} business in ${city}, ${state}.`,
-    contextNote,
-    buildSeoRequirements(businessData),
-    `Current draft (${countWords(currentText)} words): "${currentText}"`,
-    `Return ONLY valid JSON: { "text": "${minWords}-${maxWords} words of expanded, keyword-optimized, locally specific content" }`,
-    `The text MUST be at least ${minWords} words.`,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  let lastError;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const raw = await callOpenAiForPage(systemPrompt, userPrompt, 900);
-      const parsed = parseJsonContent(raw);
-      const text = parsed?.text;
-      if (countWords(text) >= minWords) {
-        return text;
-      }
-      if (attempt < 2) continue;
-      return text || currentText;
-    } catch (e) {
-      lastError = e;
-    }
-  }
-
-  console.warn(
-    JSON.stringify({
-      event: 'expand_text_field_failed',
-      label,
-      error: lastError?.message ?? String(lastError),
-      businessName,
-    }),
-  );
-  return currentText;
-}
-
-const TEXT_FIELD_EXPANSION_SPECS = {
-  'about.paragraph1': {
-    label: 'home page about section first paragraph',
-    maxWords: 200,
-  },
-  'about.paragraph2': {
-    label: 'home page about section second paragraph',
-    maxWords: 200,
-  },
-  'story.paragraph1': {
-    label: 'about page company history paragraph',
-    maxWords: 250,
-  },
-  'story.paragraph2': {
-    label: 'about page mission and values paragraph',
-    maxWords: 250,
-  },
-  'team.description': {
-    label: 'about page team description',
-    maxWords: 140,
-  },
-  intro: {
-    label: 'page introduction',
-    maxWords: 160,
-  },
-  localIntro: {
-    label: 'location page local introduction',
-    maxWords: 200,
-  },
-  whyLocal: {
-    label: 'location page why local customers should choose this business',
-    maxWords: 150,
-  },
-  serviceArea: {
-    label: 'location page service area description',
-    maxWords: 120,
-  },
-};
-
-function getNestedField(obj, path) {
-  return path.split('.').reduce((current, key) => current?.[key], obj);
-}
-
-function setNestedField(obj, path, value) {
-  const parts = path.split('.');
-  let current = obj;
-  for (let i = 0; i < parts.length - 1; i += 1) {
-    if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
-      current[parts[i]] = {};
-    }
-    current = current[parts[i]];
-  }
-  current[parts[parts.length - 1]] = value;
 }
 
 function normalizePageStructure(pageType, content) {
@@ -468,452 +413,231 @@ function normalizePageStructure(pageType, content) {
   return result;
 }
 
-async function expandShortTextFields(content, issues, businessData, systemPrompt) {
-  const result = JSON.parse(JSON.stringify(content));
-
-  await Promise.all(
-    issues
-      .filter((issue) => !issue.field.startsWith('posts['))
-      .map(async (issue) => {
-        const spec = TEXT_FIELD_EXPANSION_SPECS[issue.field];
-        if (!spec) return;
-
-        const currentText = getNestedField(result, issue.field);
-        const draft =
-          typeof currentText === 'string' && currentText.trim()
-            ? currentText
-            : 'Write fresh content for this section.';
-
-        const expandedText = await expandTextField(businessData, systemPrompt, {
-          label: spec.label,
-          currentText: draft,
-          minWords: issue.minimum,
-          maxWords: spec.maxWords,
-          contextNote:
-            typeof currentText === 'string' && currentText.trim()
-              ? ''
-              : 'This section was missing from the draft — write it from scratch.',
-        });
-        setNestedField(result, issue.field, expandedText);
-      }),
-  );
-
-  return result;
-}
-
 /**
- * Generates a single blog post in its own completion so each article reliably
- * reaches the 400-500 word SEO target.
+ * Blog body + FAQs as separate contract units (fail closed).
  */
 async function generateBlogPost(businessData, postOutline, systemPrompt, postIndex) {
   const { businessName, industry, city, state } = businessData;
   const title = postOutline?.title || `Blog post ${postIndex + 1}`;
   const category = postOutline?.category || 'Tips';
 
-  const userPrompt = [
-    `Write a complete blog post for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+  const bodyPrompt = [
+    `Write a complete long-form blog post BODY for ${businessName}, a ${industry} business in ${city}, ${state}.`,
     `Title: "${title}". Category: ${category}.`,
     postOutline?.excerpt ? `Summary theme: ${postOutline.excerpt}` : '',
     buildSeoRequirements(businessData),
-    'Return ONLY valid JSON with this exact structure:',
+    buildBlogBodyScaffold(),
+    'Return ONLY valid JSON with this exact structure (NO faqs field):',
     '{ "title": "...", "excerpt": "40-60 words", "category": "...", "readTime": "X min read",',
-    '"introduction": "80-100 words",',
+    `"introduction": "${TARGETS.blogIntro.min}-${TARGETS.blogIntro.max} words",`,
     '"sections": [',
-    '{ "heading": "clear H2, max 8 words", "paragraphs": ["150-175 words with local and industry keywords"] },',
-    '{ "heading": "clear H2, max 8 words", "paragraphs": ["150-175 words with practical advice and local relevance"] }',
+    `{ "heading": "H2 max 8 words", "paragraphs": ["${TARGETS.blogH2Paragraph.min}-${TARGETS.blogH2Paragraph.max} words"], "subsections": [{ "heading": "H3 max 8 words", "paragraphs": ["${TARGETS.blogH3Paragraph.min}-${TARGETS.blogH3Paragraph.max} words"] }] },`,
+    `{ "heading": "H2 max 8 words", "paragraphs": ["${TARGETS.blogH2Paragraph.min}-${TARGETS.blogH2Paragraph.max} words"], "subsections": [{ "heading": "H3 max 8 words", "paragraphs": ["${TARGETS.blogH3Paragraph.min}-${TARGETS.blogH3Paragraph.max} words"] }] },`,
+    `{ "heading": "H2 max 8 words", "paragraphs": ["${TARGETS.blogH2Paragraph.min}-${TARGETS.blogH2Paragraph.max} words"], "subsections": [{ "heading": "H3 max 8 words", "paragraphs": ["${TARGETS.blogH3Paragraph.min}-${TARGETS.blogH3Paragraph.max} words"] }] },`,
+    `{ "heading": "H2 max 8 words", "paragraphs": ["${TARGETS.blogH2Paragraph.min}-${TARGETS.blogH2Paragraph.max} words"], "subsections": [{ "heading": "H3 max 8 words", "paragraphs": ["${TARGETS.blogH3Paragraph.min}-${TARGETS.blogH3Paragraph.max} words"] }] }`,
     '],',
-    '"conclusion": "80-100 words",',
-    '"faqs": [',
-    '{ "question": "real customer question", "answer": "40-70 words" },',
-    '{ "question": "different real customer question", "answer": "40-70 words" },',
-    '{ "question": "third real customer question", "answer": "40-70 words" }',
+    `"conclusion": "${TARGETS.blogConclusion.min}-${TARGETS.blogConclusion.max} words",`,
+    '"internalLinks": [',
+    '{ "label": "descriptive anchor text to services", "path": "services" },',
+    '{ "label": "descriptive anchor text to about", "path": "about" },',
+    '{ "label": "descriptive anchor text to contact", "path": "contact" }',
     '],',
+    `"bodyWordCount": ${TARGETS.blogBody},`,
     '"seo": { "title": "50-60 characters with post title, business name, and city", "metaDescription": "120-155 characters with post topic, city, and call to action" } }',
-    'Introduction + all section paragraphs + conclusion combined MUST total at least 400 words.',
+    `Include exactly ${STRUCTURE.blogH2Count} H2 sections, each with at least one H3 subsection.`,
+    'internalLinks path values must be one of: services, about, contact, blog (relative page keys only).',
     'Write genuinely useful, distinct content — no filler or repetition.',
   ]
     .filter(Boolean)
     .join(' ');
 
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const raw = await callOpenAiForPage(systemPrompt, userPrompt, 2500);
-      const parsed = parseJsonContent(raw);
-      const words = countBlogPostWords(parsed);
-      if (words >= MIN_BLOG_POST_WORDS) {
-        return parsed;
-      }
-      if (attempt < 3) {
-        console.warn(
-          JSON.stringify({
-            event: 'blog_post_retry',
-            postIndex,
-            title,
-            words,
-            businessName,
-            attempt,
-          }),
-        );
-        continue;
-      }
-      return parsed;
-    } catch (e) {
-      lastError = e;
-    }
-  }
+  const body = await generateUnit({
+    unitId: 'blog.body',
+    systemPrompt,
+    userPrompt: bodyPrompt,
+    maxTokens: 7000,
+    temperature: LENGTH_CRITICAL_TEMPERATURE,
+  });
 
-  throw lastError ?? new Error(`Failed to generate blog post "${title}"`);
+  const faqsPayload = await generateUnit({
+    unitId: 'blog.faqs',
+    systemPrompt,
+    userPrompt: [
+      `Write exactly ${STRUCTURE.blogFaqCount} FAQs for the blog post "${body.title || title}" for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      `Return ONLY valid JSON: { "faqs": [ { "question": "...", "answer": "${TARGETS.faqAnswer.min}-${TARGETS.faqAnswer.max} words" }, ... ${STRUCTURE.blogFaqCount} items ] }`,
+      `Each answer MUST be at least ${FLOORS.faqAnswer} words (target ${TARGETS.faqAnswer.min}-${TARGETS.faqAnswer.max}). Never one-sentence answers.`,
+      'Questions must be distinct, useful, and related to the article topic with local/industry detail.',
+    ].join(' '),
+    maxTokens: 2500,
+    temperature: LENGTH_CRITICAL_TEMPERATURE,
+  });
+
+  return { ...body, faqs: faqsPayload.faqs };
 }
 
-/**
- * Blog page: outline first, then expand each post in parallel.
- */
 async function generateBlogPageContent(businessData, pageSchema, systemPrompt, contextNote) {
-  const shellNote = [
-    contextNote,
-    'Generate exactly 3 distinct blog posts. For each post provide only title, excerpt, category, and readTime.',
-    'Use one-sentence placeholders for introduction, sections, conclusion, and FAQs — full post bodies are written separately.',
+  const { businessName, industry, city, state } = businessData;
+  const outlinePrompt = [
+    `Propose exactly 3 distinct blog post ideas for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+    contextNote || '',
+    'Return ONLY valid JSON with this exact shape (no post bodies):',
+    '{ "posts": [',
+    '{ "title": "max 12 words", "excerpt": "40-60 words", "category": "one word", "readTime": "X min read" },',
+    '{ "title": "max 12 words", "excerpt": "40-60 words", "category": "one word", "readTime": "X min read" },',
+    '{ "title": "max 12 words", "excerpt": "40-60 words", "category": "one word", "readTime": "X min read" }',
+    '],',
+    '"seo": { "title": "50-60 characters with business name, city, and industry", "metaDescription": "120-155 characters with city and call to action" } }',
+    'Do not include introduction, sections, conclusion, faqs, or internalLinks in this response.',
   ]
     .filter(Boolean)
     .join(' ');
 
-  const shellPrompt = buildPagePrompt(businessData, pageSchema, 'blog', shellNote);
   let shell;
   let lastError;
-
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      const raw = await callOpenAiForPage(systemPrompt, shellPrompt, 2500);
+      const raw = await callOpenAiForPage(systemPrompt, outlinePrompt, 1200, {
+        temperature: LENGTH_CRITICAL_TEMPERATURE,
+        scope: 'blog_outline',
+      });
       shell = parseJsonContent(raw);
-      break;
+      if (Array.isArray(shell?.posts) && shell.posts.length >= 3) break;
+      throw new Error('Blog outline missing 3 posts');
     } catch (e) {
       lastError = e;
-    }
-  }
-
-  if (!shell) {
-    throw lastError ?? new Error('Failed to generate blog page shell');
-  }
-
-  const outlines = Array.isArray(shell.posts) ? shell.posts.slice(0, 3) : [];
-  if (outlines.length === 0) {
-    return shell;
-  }
-
-  const expandedPosts = await Promise.all(
-    outlines.map(async (outline, index) => {
-      try {
-        return await generateBlogPost(businessData, outline, systemPrompt, index);
-      } catch (e) {
-        console.warn(
-          JSON.stringify({
-            event: 'blog_post_failed',
-            postIndex: index,
-            title: outline?.title,
-            error: e?.message ?? String(e),
-            businessName: businessData?.businessName,
-          }),
-        );
-        return outline;
-      }
-    }),
-  );
-
-  const assembled = { ...shell, posts: expandedPosts };
-  return ensureMinimumContentLength('blog', assembled, businessData, systemPrompt);
-}
-
-/**
- * Expands any body fields that still fall below SEO minimums after the initial
- * page generation pass.
- */
-async function ensureMinimumContentLength(pageType, content, businessData, systemPrompt) {
-  let result = normalizePageStructure(pageType, content);
-
-  for (let pass = 1; pass <= 2; pass += 1) {
-    const issues = validatePageContentLength(pageType, result);
-    if (issues.length === 0) {
-      return result;
-    }
-
-    const blogIssues = issues.filter((issue) => issue.field.startsWith('posts['));
-    const textIssues = issues.filter((issue) => !issue.field.startsWith('posts['));
-
-    if (textIssues.length > 0) {
-      result = await expandShortTextFields(result, textIssues, businessData, systemPrompt);
-    }
-
-    if (blogIssues.length > 0 && Array.isArray(result.posts)) {
-      const indexes = [
-        ...new Set(
-          blogIssues
-            .map((issue) => {
-              const match = issue.field.match(/^posts\[(\d+)\]/);
-              return match ? Number(match[1]) : null;
-            })
-            .filter((index) => index != null),
-        ),
-      ];
-
-      const posts = [...result.posts];
-      await Promise.all(
-        indexes.map(async (index) => {
-          if (!posts[index]) return;
-          try {
-            posts[index] = await generateBlogPost(
-              businessData,
-              posts[index],
-              systemPrompt,
-              index,
-            );
-          } catch (e) {
-            console.warn(
-              JSON.stringify({
-                event: 'blog_post_expand_failed',
-                postIndex: index,
-                pass,
-                error: e?.message ?? String(e),
-                businessName: businessData?.businessName,
-              }),
-            );
-          }
+      console.warn(
+        JSON.stringify({
+          event: 'blog_outline_retry',
+          attempt,
+          error: e?.message ?? String(e),
+          businessName,
         }),
       );
-      result = { ...result, posts };
-    }
-
-    console.warn(
-      JSON.stringify({
-        event: 'page_content_expand_pass',
-        pageType,
-        pass,
-        issueCount: issues.length,
-        businessName: businessData?.businessName,
-      }),
-    );
-  }
-
-  const remaining = validatePageContentLength(pageType, result);
-  if (remaining.length > 0) {
-    console.warn(
-      JSON.stringify({
-        event: 'page_content_length_below_minimum',
-        pageType,
-        issues: remaining,
-        businessName: businessData?.businessName,
-      }),
-    );
-  }
-
-  return result;
-}
-
-/**
- * Generates a single service fullDescription in its own completion so the model
- * can reliably reach 200-250 words. Packing 8 long descriptions into one JSON
- * object causes every model to compress each field.
- */
-async function generateServiceFullDescription(businessData, service, systemPrompt) {
-  const { businessName, industry, city, state } = businessData;
-  const title = service?.title || 'Service';
-  const short = service?.shortDescription || '';
-
-  const userPrompt = [
-    `Write the fullDescription for "${title}" offered by ${businessName}, a ${industry} business in ${city}, ${state}.`,
-    short ? `Short summary: ${short}` : '',
-    buildSeoRequirements(businessData),
-    'Return ONLY valid JSON: { "fullDescription": "200-250 words of in-depth, keyword-optimized detail about this specific service — what it includes, the process, benefits, and why local customers in this city should choose this business." }',
-    'The fullDescription MUST be at least 200 words.',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  let lastError;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const raw = await callOpenAiForPage(systemPrompt, userPrompt, 900);
-      const parsed = parseJsonContent(raw);
-      const words = countWords(parsed?.fullDescription);
-      if (words >= 200) {
-        return parsed.fullDescription;
-      }
-      if (attempt < 2) {
-        console.warn(
-          JSON.stringify({
-            event: 'service_full_description_retry',
-            serviceTitle: title,
-            words,
-            businessName,
-          }),
-        );
-        continue;
-      }
-      return parsed.fullDescription || short;
-    } catch (e) {
-      lastError = e;
     }
   }
 
-  throw lastError ?? new Error(`Failed to generate fullDescription for "${title}"`);
-}
-
-/**
- * Services page: structure first, then expand each fullDescription in parallel.
- */
-async function generateServicesPageContent(businessData, pageSchema, systemPrompt, contextNote) {
-  const shellNote = [
-    contextNote,
-    'For each service fullDescription, write only a single-sentence placeholder (20-30 words). Each fullDescription will be expanded in a separate step.',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const shellPrompt = buildPagePrompt(
-    businessData,
-    pageSchema,
-    'services',
-    shellNote,
-  );
-
-  const maxTokens = MAX_TOKENS_BY_PAGE.services;
-  let shell;
-  let lastError;
-
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const raw = await callOpenAiForPage(systemPrompt, shellPrompt, maxTokens);
-      shell = parseJsonContent(raw);
-      break;
-    } catch (e) {
-      lastError = e;
-    }
-  }
-
-  if (!shell) {
-    throw lastError ?? new Error('Failed to generate services page shell');
-  }
-
-  const services = Array.isArray(shell.services) ? shell.services : [];
-  if (services.length === 0) {
-    return shell;
-  }
-
-  const expandedServices = await Promise.all(
-    services.map(async (service) => {
-      try {
-        const fullDescription = await generateServiceFullDescription(
-          businessData,
-          service,
-          systemPrompt,
-        );
-        return { ...service, fullDescription };
-      } catch (e) {
-        console.warn(
-          JSON.stringify({
-            event: 'service_full_description_failed',
-            serviceTitle: service?.title,
-            error: e?.message ?? String(e),
-            businessName: businessData?.businessName,
-          }),
-        );
-        return service;
-      }
-    }),
-  );
-
-  return { ...shell, services: expandedServices };
-}
-
-function parseJsonContent(raw) {
-  return JSON.parse(raw);
-}
-
-function countWords(text) {
-  if (!text || typeof text !== 'string') return 0;
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function countBlogPostWords(post) {
-  if (!post || typeof post !== 'object') return 0;
-
-  let total = countWords(post.introduction) + countWords(post.conclusion);
-
-  if (Array.isArray(post.sections)) {
-    for (const section of post.sections) {
-      if (!Array.isArray(section?.paragraphs)) continue;
-      for (const paragraph of section.paragraphs) {
-        total += countWords(paragraph);
-      }
-    }
-  }
-
-  return total;
-}
-
-/** Minimum word counts for SEO body fields, keyed by page type. */
-const MIN_WORDS_BY_PAGE = {
-  home: [
-    ['about.paragraph1', (c) => countWords(c?.about?.paragraph1), 150],
-    ['about.paragraph2', (c) => countWords(c?.about?.paragraph2), 150],
-  ],
-  about: [
-    ['story.paragraph1', (c) => countWords(c?.story?.paragraph1), 200],
-    ['story.paragraph2', (c) => countWords(c?.story?.paragraph2), 200],
-    ['team.description', (c) => countWords(c?.team?.description), 100],
-  ],
-  services: [['intro', (c) => countWords(c?.intro), 120]],
-  contact: [['intro', (c) => countWords(c?.intro), 90]],
-  location: [
-    ['localIntro', (c) => countWords(c?.localIntro), 150],
-    ['whyLocal', (c) => countWords(c?.whyLocal), 100],
-    ['serviceArea', (c) => countWords(c?.serviceArea), 80],
-  ],
-};
-
-const MIN_BLOG_POST_WORDS = 400;
-
-function validatePageContentLength(pageType, content) {
-  const rules = MIN_WORDS_BY_PAGE[pageType];
-  const issues = [];
-
-  if (rules) {
-    for (const [field, getter, minimum] of rules) {
-      const words = getter(content);
-      if (words > 0 && words < minimum) {
-        issues.push({ field, words, minimum });
-      }
-    }
-  }
-
-  if (pageType === 'blog' && Array.isArray(content?.posts)) {
-    content.posts.forEach((post, index) => {
-      const words = countBlogPostWords(post);
-      if (words > 0 && words < MIN_BLOG_POST_WORDS) {
-        issues.push({
-          field: `posts[${index}] total content (intro + sections + conclusion)`,
-          words,
-          minimum: MIN_BLOG_POST_WORDS,
-        });
-      }
+  if (!shell || !Array.isArray(shell.posts) || shell.posts.length < 3) {
+    throw lastError ?? new ContentUnitError('Failed to generate blog outline', {
+      unitId: 'blog.outline',
+      code: 'CONTENT_UNIT_INFRA',
     });
   }
 
-  return issues;
+  const outlines = shell.posts.slice(0, 3);
+  const expandedPosts = [];
+  for (let index = 0; index < outlines.length; index += 1) {
+    expandedPosts.push(
+      await generateBlogPost(businessData, outlines[index], systemPrompt, index),
+    );
+  }
+
+  return { ...shell, posts: expandedPosts };
 }
 
-function buildLengthRetryFeedback(issues) {
-  const lines = issues.map(
-    (i) => `- ${i.field}: ${i.words} words (minimum ${i.minimum} required)`,
+/**
+ * Services: catalog (short) + intro unit + one fullDescription unit per service.
+ */
+async function generateServicesPageContent(businessData, pageSchema, systemPrompt, contextNote) {
+  const { businessName, industry, city, state } = businessData;
+
+  const catalogPrompt = [
+    contextNote || '',
+    `Generate the services catalog for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+    buildSeoRequirements(businessData),
+    `Return ONLY valid JSON with hero, cta, seo, and ${STRUCTURE.serviceCatalogMin}-${STRUCTURE.serviceCatalogMax} services.`,
+    'Each service: { "title": "2-5 word real service name", "shortDescription": "30-45 words", "icon": "lucide icon name", "fullDescription": "" }',
+    'Leave fullDescription empty — it is generated per service in a separate unit.',
+    'Never use placeholder titles like Service One or Core Service.',
+    'Include hero { heading, subheading }, cta { heading, buttonText }, seo { title, metaDescription }.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  let catalogRaw;
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const raw = await callOpenAiForPage(systemPrompt, catalogPrompt, 3500, {
+        temperature: LENGTH_CRITICAL_TEMPERATURE,
+        scope: 'services_catalog',
+      });
+      catalogRaw = parseJsonContent(raw);
+      if (
+        Array.isArray(catalogRaw?.services) &&
+        catalogRaw.services.length >= STRUCTURE.serviceCatalogMin
+      ) {
+        break;
+      }
+      throw new Error('Services catalog missing services array');
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (!catalogRaw?.services?.length) {
+    throw lastError ?? new ContentUnitError('Failed to generate services catalog', {
+      unitId: 'services.catalog',
+      code: 'CONTENT_UNIT_INFRA',
+    });
+  }
+
+  const introUnit = await generateUnit({
+    unitId: 'services.intro',
+    systemPrompt,
+    userPrompt: [
+      `Write the services page intro for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      buildServicesIntroScaffold({ businessName, city, state }),
+      buildSeoRequirements(businessData),
+      `Return ONLY JSON: { "intro": "continuous string meeting scaffold, at least ${TARGETS.servicesIntro} words", "introWordCount": ${TARGETS.servicesIntro} }`,
+    ].join(' '),
+    maxTokens: 1200,
+    normalize: (c) => ({ intro: c.intro || c.text }),
+  });
+
+  const services = catalogRaw.services.slice(0, STRUCTURE.serviceCatalogMax);
+  const withDescriptions = await mapPool(
+    services.map((service) => async () => {
+      const desc = await generateUnit({
+        unitId: 'services.fullDescription',
+        systemPrompt,
+        userPrompt: [
+          `Write the fullDescription for "${service.title}" offered by ${businessName}, a ${industry} business in ${city}, ${state}.`,
+          service.shortDescription ? `Short summary: ${service.shortDescription}` : '',
+          buildSeoRequirements(businessData),
+          `Return ONLY JSON: { "fullDescription": "${TARGETS.serviceFullDescription.min}-${TARGETS.serviceFullDescription.max} words of in-depth detail" }`,
+          `HARD MINIMUM ${FLOORS.serviceFullDescription} words.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        maxTokens: 1200,
+      });
+      return { ...service, fullDescription: desc.fullDescription };
+    }),
+    3,
   );
-  return [
-    ' CRITICAL LENGTH CORRECTION:',
-    'Your previous JSON was structurally valid but these body fields were too short:',
-    ...lines,
-    'Regenerate the COMPLETE JSON from scratch. Every field listed above MUST reach its minimum word count.',
-    'Expand with specific, locally relevant detail about the business, city, and services — not generic filler.',
-  ].join(' ');
+
+  return { ...catalogRaw, intro: introUnit.intro, services: withDescriptions };
 }
+
+
+function parseJsonContent(raw) {
+  const text = String(raw ?? '').trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Models occasionally wrap JSON in fences or add trailing prose.
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) {
+      return JSON.parse(fenced[1].trim());
+    }
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(text.slice(start, end + 1));
+    }
+    throw new Error('Failed to parse JSON content from model response');
+  }
+}
+
 
 /**
  * @param {object} businessData
@@ -949,14 +673,37 @@ export async function generatePageContent(
     return finalizePageContent('blog', blogContent, businessData, systemPrompt);
   }
 
+  if (pageType === 'contact') {
+    const content = await generateContactPageContent(
+      businessData,
+      pageSchema,
+      systemPrompt,
+      contextNote,
+    );
+    return finalizePageContent('contact', content, businessData, systemPrompt);
+  }
+
+  if (pageType === 'home' || pageType === 'about') {
+    const content = await generateStructuredPageWithLongUnits(
+      businessData,
+      pageSchema,
+      systemPrompt,
+      pageType,
+      contextNote,
+    );
+    return finalizePageContent(pageType, content, businessData, systemPrompt);
+  }
+
   const userPrompt = buildPagePrompt(businessData, pageSchema, pageType, contextNote);
   const maxTokens = MAX_TOKENS_BY_PAGE[pageType] ?? 4500;
-  const maxAttempts = 2;
 
   let lastError;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      const raw = await callOpenAiForPage(systemPrompt, userPrompt, maxTokens);
+      const raw = await callOpenAiForPage(systemPrompt, userPrompt, maxTokens, {
+        temperature: LENGTH_CRITICAL_TEMPERATURE,
+        scope: pageType,
+      });
       const content = normalizePageStructure(pageType, parseJsonContent(raw));
       return finalizePageContent(pageType, content, businessData, systemPrompt);
     } catch (e) {
@@ -974,6 +721,113 @@ export async function generatePageContent(
   }
 
   throw lastError ?? new Error(`Failed to generate ${pageType} page content`);
+}
+
+async function generateContactPageContent(businessData, pageSchema, systemPrompt, contextNote) {
+  const { businessName, industry, city, state } = businessData;
+  const shellNote = [
+    contextNote,
+    'For "intro", write a single placeholder sentence only — intro is generated in a separate contract unit.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const raw = await callOpenAiForPage(
+    systemPrompt,
+    buildPagePrompt(businessData, pageSchema, 'contact', shellNote),
+    2500,
+    { temperature: LENGTH_CRITICAL_TEMPERATURE, scope: 'contact_shell' },
+  );
+  const shell = normalizePageStructure('contact', parseJsonContent(raw));
+
+  const introUnit = await generateUnit({
+    unitId: 'contact.intro',
+    systemPrompt,
+    userPrompt: [
+      `Write the contact page intro for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      buildContactIntroScaffold({ businessName, city, state }),
+      buildSeoRequirements(businessData),
+      `Return ONLY JSON: { "intro": "continuous string meeting scaffold, at least ${TARGETS.contactIntro} words", "introWordCount": ${TARGETS.contactIntro} }`,
+    ].join(' '),
+    maxTokens: 1200,
+    normalize: (c) => ({ intro: c.intro || c.text }),
+  });
+
+  return { ...shell, intro: introUnit.intro };
+}
+
+async function generateStructuredPageWithLongUnits(
+  businessData,
+  pageSchema,
+  systemPrompt,
+  pageType,
+  contextNote,
+) {
+  const { businessName, industry, city, state } = businessData;
+  const shellNote = [
+    contextNote,
+    pageType === 'home'
+      ? 'For about.paragraph1 and about.paragraph2, write one short placeholder sentence each — those fields are generated in a separate contract unit.'
+      : 'For story.paragraph1, story.paragraph2, and team.description, write one short placeholder sentence each — those fields are generated in separate contract units.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const raw = await callOpenAiForPage(
+    systemPrompt,
+    buildPagePrompt(businessData, pageSchema, pageType, shellNote),
+    MAX_TOKENS_BY_PAGE[pageType] ?? 4500,
+    { temperature: LENGTH_CRITICAL_TEMPERATURE, scope: `${pageType}_shell` },
+  );
+  const shell = normalizePageStructure(pageType, parseJsonContent(raw));
+
+  if (pageType === 'home') {
+    const about = await generateUnit({
+      unitId: 'home.about',
+      systemPrompt,
+      userPrompt: [
+        `Write the home page about section for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+        buildSeoRequirements(businessData),
+        `Return ONLY JSON: { "paragraph1": "${TARGETS.homeAboutParagraph.min}-${TARGETS.homeAboutParagraph.max} words", "paragraph2": "${TARGETS.homeAboutParagraph.min}-${TARGETS.homeAboutParagraph.max} words" }`,
+        `HARD MINIMUM ${FLOORS.homeAboutParagraph} words per paragraph.`,
+      ].join(' '),
+      maxTokens: 1500,
+    });
+    return {
+      ...shell,
+      about: { ...(shell.about || {}), paragraph1: about.paragraph1, paragraph2: about.paragraph2 },
+    };
+  }
+
+  const story = await generateUnit({
+    unitId: 'about.story',
+    systemPrompt,
+    userPrompt: [
+      `Write the about page story paragraphs for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      buildSeoRequirements(businessData),
+      `Return ONLY JSON: { "paragraph1": "${TARGETS.aboutStoryParagraph.min}-${TARGETS.aboutStoryParagraph.max} words", "paragraph2": "${TARGETS.aboutStoryParagraph.min}-${TARGETS.aboutStoryParagraph.max} words" }`,
+      `HARD MINIMUM ${FLOORS.aboutStoryParagraph} words per paragraph.`,
+    ].join(' '),
+    maxTokens: 1600,
+  });
+
+  const team = await generateUnit({
+    unitId: 'about.team',
+    systemPrompt,
+    userPrompt: [
+      `Write the about page team description for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      buildSeoRequirements(businessData),
+      `Return ONLY JSON: { "description": "${TARGETS.aboutTeamDescription.min}-${TARGETS.aboutTeamDescription.max} words" }`,
+      `HARD MINIMUM ${FLOORS.aboutTeamDescription} words.`,
+    ].join(' '),
+    maxTokens: 800,
+  });
+
+  return {
+    ...shell,
+    story: { ...(shell.story || {}), paragraph1: story.paragraph1, paragraph2: story.paragraph2 },
+    team: { ...(shell.team || {}), description: team.description },
+  };
 }
 
 const HOME_SERVICES_LIMIT = 6;

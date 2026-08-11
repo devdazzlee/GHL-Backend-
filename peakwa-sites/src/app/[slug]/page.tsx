@@ -2,15 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buildPageMetadata } from '@/src/lib/seo';
-import { ArrowRight, ChevronDown, MapPin, Quote, Star } from 'lucide-react';
+import { ArrowRight, MapPin, Quote, Star } from 'lucide-react';
 import { CtaBanner } from '@/src/components/CtaBanner';
+import { FaqAccordion } from '@/src/components/FaqAccordion';
 import { FAQSchema, LocalBusinessSchema, WebSiteSchema } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getAllActiveSites, getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { industryRequiresLicense } from '@/src/lib/industryClaims';
 import { resolveDesignPreset, servicesGridClass } from '@/src/designs/presets';
@@ -783,28 +786,21 @@ export default async function HomePage({ params }: PageProps) {
               Everything you need to know about working with {site.businessName}
             </p>
           </div>
-          <div className="space-y-4">
-            {faqs.map((faq) => (
-              <details
-                key={faq.question}
-                className="group bg-white p-6 transition"
-                style={cardChromeStyle()}
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-semibold text-gray-900 [&::-webkit-details-marker]:hidden">
-                  <span>{faq.question}</span>
-                  <ChevronDown
-                    className="h-5 w-5 shrink-0 transition-transform duration-200 group-open:rotate-180"
-                    style={{ color: accentOnWhite }}
-                  />
-                </summary>
-                <p className="mt-4 leading-relaxed text-gray-600">{faq.answer}</p>
-              </details>
-            ))}
+          <div className="mt-2">
+            <FaqAccordion faqs={faqs} accentColor={theme.accentColor} />
           </div>
         </div>
       </SectionWrapper>
       </div>
       </div>
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        showFaqs={false}
+        currentPath=""
+        relatedLinks={serviceRelatedLinks(homeServices, { limit: 3 })}
+      />
 
       <CtaBanner
         site={site}

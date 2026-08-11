@@ -7,13 +7,15 @@ import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { CtaBanner } from '@/src/components/CtaBanner';
 import { FaqAccordion } from '@/src/components/FaqAccordion';
-import { FAQSchema, ServiceDetailSchema } from '@/src/components/SchemaMarkup';
+import { ServicePageJsonLd } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getServicePageContent, getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type ServicesContent } from '@/src/lib/content';
+import { parseJson, type SeoExtraContent, type ServicesContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
 import { resolveDesignPreset, type DesignPreset } from '@/src/designs/presets';
@@ -36,6 +38,7 @@ type ServicePageContent = {
   benefits?: Array<{ title?: string; description?: string }>;
   faqs?: Array<{ question?: string; answer?: string }>;
   whyUs?: string;
+  seoExtra?: SeoExtraContent;
   seo?: { title?: string; metaDescription?: string };
 };
 
@@ -166,6 +169,7 @@ function ServiceHero({
       >
         <Breadcrumbs
           site={site}
+          skipSchema
           items={[
             { label: 'Services', href: `/${slug}/services` },
             { label: serviceTitle },
@@ -281,11 +285,16 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
   return (
     <>
-      <ServiceDetailSchema
+      <ServicePageJsonLd
         site={site}
         serviceTitle={serviceTitle}
         description={service.fullDescription || service.shortDescription || ''}
         serviceSlug={serviceSlug}
+        faqs={faqs}
+        breadcrumbItems={[
+          { label: 'Services', href: `/${slug}/services` },
+          { label: serviceTitle },
+        ]}
       />
       <ServiceHero
         site={site}
@@ -441,11 +450,16 @@ function ServiceDetailFromContent({
 
   return (
     <>
-      <ServiceDetailSchema
+      <ServicePageJsonLd
         site={site}
         serviceTitle={serviceTitle}
         description={content.overview || ''}
         serviceSlug={slugifyService(serviceTitle)}
+        faqs={faqs}
+        breadcrumbItems={[
+          { label: 'Services', href: `/${slug}/services` },
+          { label: serviceTitle },
+        ]}
       />
       <ServiceHero
         site={site}
@@ -556,7 +570,6 @@ function ServiceDetailFromContent({
 
       {faqs.length > 0 ? (
         <SectionWrapper background={theme.secondaryColor} className={pad}>
-          <FAQSchema faqs={faqs} />
           <div className="mx-auto max-w-3xl">
             <h2 className={clsx('text-3xl font-bold text-gray-900', headingAlignClass(design))}>
               Frequently Asked Questions
@@ -616,6 +629,18 @@ function ServiceDetailFromContent({
           </div>
         </SectionWrapper>
       ) : null}
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        showFaqs={false}
+        currentPath={`services/${slugifyService(serviceTitle)}`}
+        relatedLinks={[
+          { label: 'All services', href: 'services' },
+          ...serviceRelatedLinks(otherServices, { limit: 3 }),
+          { label: 'Get in touch', href: 'contact' },
+        ]}
+      />
 
       <CtaBanner
         site={site}

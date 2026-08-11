@@ -6,16 +6,18 @@ import { getAccessibleForeground, resolveTheme } from '@/src/lib/theme';
 type BreadcrumbsProps = {
   site: GeneratedSite;
   items: Array<{ label: string; href?: string }>;
+  /** When true, visual crumbs only — page owns BreadcrumbList in a @graph script. */
+  skipSchema?: boolean;
 };
 
-export function Breadcrumbs({ site, items }: BreadcrumbsProps) {
+export function Breadcrumbs({ site, items, skipSchema = false }: BreadcrumbsProps) {
   const theme = resolveTheme(site);
   const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
   const base = `/${site.slug}`;
 
   return (
     <>
-      <BreadcrumbListSchema site={site} items={items} />
+      {skipSchema ? null : <BreadcrumbListSchema site={site} items={items} />}
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-gray-500">
       <ol className="flex flex-wrap items-center gap-2">
         <li>

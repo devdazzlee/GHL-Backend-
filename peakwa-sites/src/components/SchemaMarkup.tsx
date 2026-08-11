@@ -24,6 +24,23 @@ function JsonLd({ schema }: { schema: Record<string, unknown> }) {
   );
 }
 
+/** One JSON-LD script with an @graph — preferred when a page has multiple types. */
+function JsonLdGraph({ nodes }: { nodes: Record<string, unknown>[] }) {
+  const filtered = nodes.filter(Boolean);
+  if (filtered.length === 0) return null;
+  if (filtered.length === 1) {
+    return <JsonLd schema={{ '@context': 'https://schema.org', ...filtered[0] }} />;
+  }
+  return (
+    <JsonLd
+      schema={{
+        '@context': 'https://schema.org',
+        '@graph': filtered,
+      }}
+    />
+  );
+}
+
 export function businessSchemaId(slug: string): string {
   return `${SITE_BASE_URL}/${slug}#business`;
 }
@@ -32,25 +49,64 @@ function websiteSchemaId(slug: string): string {
   return `${SITE_BASE_URL}/${slug}#website`;
 }
 
-function resolveBusinessTypes(industry: string): string | string[] {
+function articleSchemaId(slug: string, postIndex: number): string {
+  return `${SITE_BASE_URL}/${slug}/blog/${postIndex}#article`;
+}
+
+function serviceSchemaId(slug: string, serviceSlug: string): string {
+  return `${SITE_BASE_URL}/${slug}/services/${serviceSlug}#service`;
+}
+
+const ARTS_INDUSTRY_MARKERS = [
+  'pottery',
+  'potter',
+  'ceramic art',
+  'ceramic',
+  'clay',
+  'art gallery',
+  'gallery',
+  'craft',
+  'art studio',
+  'arts',
+  'sculpture',
+  'painting class',
+  'fine art',
+  'visual art',
+] as const;
+
+function matchesArtsIndustry(value: string): boolean {
+  const lower = value.toLowerCase();
+  if (ARTS_INDUSTRY_MARKERS.some((marker) => lower.includes(marker))) return true;
+  // e.g. "Ceramic Art & Pottery Studio"
+  return lower.includes('art') && lower.includes('studio');
+}
+
+/**
+ * Maps industry strings to schema.org LocalBusiness subtypes.
+ * Arts/pottery/studio businesses get ArtGallery for richer rich-result typing.
+ * Optional description fallback covers vague industry labels.
+ */
+export function resolveBusinessTypes(
+  industry: string,
+  description?: string | null,
+): string | string[] {
   const value = industry.toLowerCase();
   if (value.includes('real estate')) return ['LocalBusiness', 'RealEstateAgent'];
   if (value.includes('dental')) return ['LocalBusiness', 'Dentist'];
   if (value.includes('hvac')) return ['LocalBusiness', 'HVACBusiness'];
   if (value.includes('plumb')) return ['LocalBusiness', 'Plumber'];
+  if (matchesArtsIndustry(industry) || (description && matchesArtsIndustry(description))) {
+    return ['LocalBusiness', 'ArtGallery'];
+  }
   return 'LocalBusiness';
 }
 
-export function LocalBusinessSchema({
-  site,
-  imageUrl,
-}: {
-  site: GeneratedSite;
-  imageUrl?: string | null;
-}) {
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
-    '@type': resolveBusinessTypes(site.industry),
+function buildLocalBusinessNode(
+  site: GeneratedSite,
+  imageUrl?: string | null,
+): Record<string, unknown> {
+  const node: Record<string, unknown> = {
+    '@type': resolveBusinessTypes(site.industry, site.description),
     '@id': businessSchemaId(site.slug),
     name: site.businessName,
     description: site.description || '',
@@ -64,12 +120,61 @@ export function LocalBusinessSchema({
     email: site.email || undefined,
     url: `${SITE_BASE_URL}/${site.slug}`,
   };
+  if (imageUrl) node.image = imageUrl;
+  return node;
+}
 
-  if (imageUrl) {
-    schema.image = imageUrl;
-  }
+function buildBreadcrumbNode(
+  site: GeneratedSite,
+  items: Array<{ label: string; href?: string }>,
+): Record<string, unknown> {
+  const baseUrl = `${SITE_BASE_URL}/${site.slug}`;
+  const list = [
+    { name: 'Home', item: baseUrl },
+    ...items.map((entry) => ({
+      name: entry.label,
+      item: entry.href ? `${SITE_BASE_URL}${entry.href}` : undefined,
+    })),
+  ];
 
-  return <JsonLd schema={schema} />;
+  return {
+    '@type': 'BreadcrumbList',
+    itemListElement: list.map((crumb, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: crumb.name,
+      ...(crumb.item ? { item: crumb.item } : {}),
+    })),
+  };
+}
+
+function buildFaqNode(faqs: { question: string; answer: string }[]): Record<string, unknown> | null {
+  if (!faqs || faqs.length === 0) return null;
+  return {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    })),
+  };
+}
+
+export function LocalBusinessSchema({
+  site,
+  imageUrl,
+}: {
+  site: GeneratedSite;
+  imageUrl?: string | null;
+}) {
+  return (
+    <JsonLd
+      schema={{
+        '@context': 'https://schema.org',
+        ...buildLocalBusinessNode(site, imageUrl),
+      }}
+    />
+  );
 }
 
 /** Sitewide identity — pair with LocalBusiness on the home page. */
@@ -94,27 +199,14 @@ export function BreadcrumbListSchema({
   site: GeneratedSite;
   items: Array<{ label: string; href?: string }>;
 }) {
-  const baseUrl = `${SITE_BASE_URL}/${site.slug}`;
-  const list = [
-    { name: 'Home', item: baseUrl },
-    ...items.map((entry) => ({
-      name: entry.label,
-      item: entry.href ? `${SITE_BASE_URL}${entry.href}` : undefined,
-    })),
-  ];
-
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: list.map((crumb, index) => ({
-      '@type': 'ListItem',
-      position: index + 1,
-      name: crumb.name,
-      ...(crumb.item ? { item: crumb.item } : {}),
-    })),
-  };
-
-  return <JsonLd schema={schema} />;
+  return (
+    <JsonLd
+      schema={{
+        '@context': 'https://schema.org',
+        ...buildBreadcrumbNode(site, items),
+      }}
+    />
+  );
 }
 
 type SchemaService = {
@@ -123,6 +215,11 @@ type SchemaService = {
   description?: string;
 };
 
+/**
+ * Services index catalog. Root is OfferCatalog (not Service). Offers carry
+ * name/description only — no nested `@type: Service` — so validators do not
+ * report N Service items on the index (detail pages own the single Service).
+ */
 export function ServiceSchema({
   businessName,
   services,
@@ -134,23 +231,17 @@ export function ServiceSchema({
 }) {
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
-    '@type': 'Service',
+    '@type': 'OfferCatalog',
+    name: `${businessName} Services`,
     provider: businessSlug
       ? { '@id': businessSchemaId(businessSlug) }
       : { '@type': 'LocalBusiness', name: businessName },
-    hasOfferCatalog: {
-      '@type': 'OfferCatalog',
-      name: `${businessName} Services`,
-      itemListElement: services.map((s, i) => ({
-        '@type': 'Offer',
-        position: i + 1,
-        itemOffered: {
-          '@type': 'Service',
-          name: s.title || '',
-          description: s.shortDescription || s.description || '',
-        },
-      })),
-    },
+    itemListElement: services.map((s, i) => ({
+      '@type': 'Offer',
+      position: i + 1,
+      name: s.title || '',
+      description: s.shortDescription || s.description || '',
+    })),
   };
 
   return <JsonLd schema={schema} />;
@@ -167,9 +258,25 @@ export function ServiceDetailSchema({
   description: string;
   serviceSlug: string;
 }) {
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
+  return (
+    <JsonLd
+      schema={{
+        '@context': 'https://schema.org',
+        ...buildServiceDetailNode(site, serviceTitle, description, serviceSlug),
+      }}
+    />
+  );
+}
+
+function buildServiceDetailNode(
+  site: GeneratedSite,
+  serviceTitle: string,
+  description: string,
+  serviceSlug: string,
+): Record<string, unknown> {
+  return {
     '@type': 'Service',
+    '@id': serviceSchemaId(site.slug, serviceSlug),
     name: serviceTitle,
     description,
     url: `${SITE_BASE_URL}/${site.slug}/services/${serviceSlug}`,
@@ -183,8 +290,34 @@ export function ServiceDetailSchema({
       },
     },
   };
+}
 
-  return <JsonLd schema={schema} />;
+/**
+ * Single @graph for a service detail page: one Service + optional FAQPage + BreadcrumbList.
+ * Prefer this over separate ServiceDetailSchema + FAQSchema + BreadcrumbListSchema scripts.
+ */
+export function ServicePageJsonLd({
+  site,
+  serviceTitle,
+  description,
+  serviceSlug,
+  faqs,
+  breadcrumbItems,
+}: {
+  site: GeneratedSite;
+  serviceTitle: string;
+  description: string;
+  serviceSlug: string;
+  faqs?: { question: string; answer: string }[];
+  breadcrumbItems: Array<{ label: string; href?: string }>;
+}) {
+  const nodes: Record<string, unknown>[] = [
+    buildServiceDetailNode(site, serviceTitle, description, serviceSlug),
+    buildBreadcrumbNode(site, breadcrumbItems),
+  ];
+  const faq = buildFaqNode(faqs ?? []);
+  if (faq) nodes.push(faq);
+  return <JsonLdGraph nodes={nodes} />;
 }
 
 /** Location landing pages — ties the business to a specific service area. */
@@ -205,7 +338,7 @@ export function LocationAreaSchema({
 }) {
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
-    '@type': resolveBusinessTypes(site.industry),
+    '@type': resolveBusinessTypes(site.industry, site.description),
     '@id': `${SITE_BASE_URL}/${site.slug}/${locationSlug}#location`,
     name: `${site.businessName} — ${city}`,
     url: `${SITE_BASE_URL}/${site.slug}/${locationSlug}`,
@@ -227,24 +360,109 @@ export function LocationAreaSchema({
   return <JsonLd schema={schema} />;
 }
 
+/**
+ * About page: AboutPage + BreadcrumbList, linked to the business entity.
+ */
+export function AboutPageJsonLd({
+  site,
+  description,
+  breadcrumbItems,
+}: {
+  site: GeneratedSite;
+  description?: string;
+  breadcrumbItems: Array<{ label: string; href?: string }>;
+}) {
+  const url = `${SITE_BASE_URL}/${site.slug}/about`;
+  return (
+    <JsonLdGraph
+      nodes={[
+        {
+          '@type': 'AboutPage',
+          '@id': `${url}#webpage`,
+          url,
+          name: `About ${site.businessName}`,
+          description: description || site.description || '',
+          isPartOf: { '@id': websiteSchemaId(site.slug) },
+          about: { '@id': businessSchemaId(site.slug) },
+          mainEntity: { '@id': businessSchemaId(site.slug) },
+        },
+        buildBreadcrumbNode(site, breadcrumbItems),
+      ]}
+    />
+  );
+}
+
+/**
+ * Contact page: ContactPage + BreadcrumbList, linked to the business entity.
+ */
+export function ContactPageJsonLd({
+  site,
+  description,
+  breadcrumbItems,
+}: {
+  site: GeneratedSite;
+  description?: string;
+  breadcrumbItems: Array<{ label: string; href?: string }>;
+}) {
+  const url = `${SITE_BASE_URL}/${site.slug}/contact`;
+  return (
+    <JsonLdGraph
+      nodes={[
+        {
+          '@type': 'ContactPage',
+          '@id': `${url}#webpage`,
+          url,
+          name: `Contact ${site.businessName}`,
+          description: description || `Contact ${site.businessName} in ${site.city}, ${site.state}.`,
+          isPartOf: { '@id': websiteSchemaId(site.slug) },
+          about: { '@id': businessSchemaId(site.slug) },
+          mainEntity: { '@id': businessSchemaId(site.slug) },
+        },
+        buildBreadcrumbNode(site, breadcrumbItems),
+      ]}
+    />
+  );
+}
+
+/**
+ * Blog index: CollectionPage + BreadcrumbList.
+ */
+export function BlogIndexJsonLd({
+  site,
+  description,
+  breadcrumbItems,
+}: {
+  site: GeneratedSite;
+  description?: string;
+  breadcrumbItems: Array<{ label: string; href?: string }>;
+}) {
+  const url = `${SITE_BASE_URL}/${site.slug}/blog`;
+  return (
+    <JsonLdGraph
+      nodes={[
+        {
+          '@type': 'CollectionPage',
+          '@id': `${url}#webpage`,
+          url,
+          name: `${site.businessName} Blog`,
+          description: description || `Articles and tips from ${site.businessName}.`,
+          isPartOf: { '@id': websiteSchemaId(site.slug) },
+          about: { '@id': businessSchemaId(site.slug) },
+        },
+        buildBreadcrumbNode(site, breadcrumbItems),
+      ]}
+    />
+  );
+}
+
 export function FAQSchema({
   faqs,
 }: {
   faqs: { question: string; answer: string }[];
 }) {
-  if (!faqs || faqs.length === 0) return null;
-
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faqs.map((faq) => ({
-      '@type': 'Question',
-      name: faq.question,
-      acceptedAnswer: { '@type': 'Answer', text: faq.answer },
-    })),
-  };
-
-  return <JsonLd schema={schema} />;
+  const node = buildFaqNode(faqs);
+  if (!node) return null;
+  return <JsonLd schema={{ '@context': 'https://schema.org', ...node }} />;
 }
 
 export function ArticleSchema({
@@ -260,15 +478,64 @@ export function ArticleSchema({
   slug: string;
   postIndex: number;
 }) {
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
+  return (
+    <JsonLd
+      schema={{
+        '@context': 'https://schema.org',
+        ...buildArticleNode(title, excerpt, businessName, slug, postIndex),
+      }}
+    />
+  );
+}
+
+function buildArticleNode(
+  title: string,
+  excerpt: string,
+  businessName: string,
+  slug: string,
+  postIndex: number,
+): Record<string, unknown> {
+  const url = `${SITE_BASE_URL}/${slug}/blog/${postIndex}`;
+  return {
     '@type': 'Article',
+    '@id': articleSchemaId(slug, postIndex),
     headline: title,
     description: excerpt,
     author: { '@type': 'Organization', name: businessName },
-    publisher: { '@type': 'Organization', name: businessName },
-    url: `${SITE_BASE_URL}/${slug}/blog/${postIndex}`,
+    publisher: { '@id': businessSchemaId(slug) },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': url,
+    },
+    url,
   };
+}
 
-  return <JsonLd schema={schema} />;
+/** Single @graph for a blog post: Article + optional FAQPage + BreadcrumbList. */
+export function BlogPostJsonLd({
+  title,
+  excerpt,
+  businessName,
+  slug,
+  postIndex,
+  site,
+  faqs,
+  breadcrumbItems,
+}: {
+  title: string;
+  excerpt: string;
+  businessName: string;
+  slug: string;
+  postIndex: number;
+  site: GeneratedSite;
+  faqs?: { question: string; answer: string }[];
+  breadcrumbItems: Array<{ label: string; href?: string }>;
+}) {
+  const nodes: Record<string, unknown>[] = [
+    buildArticleNode(title, excerpt, businessName, slug, postIndex),
+    buildBreadcrumbNode(site, breadcrumbItems),
+  ];
+  const faq = buildFaqNode(faqs ?? []);
+  if (faq) nodes.push(faq);
+  return <JsonLdGraph nodes={nodes} />;
 }

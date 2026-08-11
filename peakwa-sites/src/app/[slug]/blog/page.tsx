@@ -4,11 +4,14 @@ import { ArrowRight, Clock } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
+import { BlogIndexJsonLd } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type BlogContent, type BlogPost } from '@/src/lib/content';
+import { parseJson, type BlogContent, type BlogPost, type ServicesContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset } from '@/src/designs/presets';
 import clsx from 'clsx';
@@ -245,6 +248,7 @@ export default async function BlogPage({ params }: PageProps) {
 
   const images = await getSiteImages(slug);
   const content = parseJson<BlogContent>(site.blogContent, {});
+  const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
   const posts = content.posts ?? [];
@@ -263,6 +267,11 @@ export default async function BlogPage({ params }: PageProps) {
 
   return (
     <>
+      <BlogIndexJsonLd
+        site={site}
+        description={content.seo?.metaDescription || undefined}
+        breadcrumbItems={[{ label: 'Blog' }]}
+      />
       <section
         className={clsx(
           'relative flex items-end overflow-hidden',
@@ -305,7 +314,7 @@ export default async function BlogPage({ params }: PageProps) {
           )}
           style={{ color: heroTextColor }}
         >
-          <Breadcrumbs site={site} items={[{ label: 'Blog' }]} />
+          <Breadcrumbs site={site} skipSchema items={[{ label: 'Blog' }]} />
           <h1 className="mt-4 text-4xl font-bold md:text-5xl">Blog</h1>
           <p
             className={clsx(
@@ -390,6 +399,18 @@ export default async function BlogPage({ params }: PageProps) {
           ) : null}
         </>
       )}
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        currentPath="blog"
+        relatedLinks={[
+          { label: 'All services', href: 'services' },
+          ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
+          { label: 'Our story', href: 'about' },
+          { label: 'Get in touch', href: 'contact' },
+        ]}
+      />
     </>
   );
 }

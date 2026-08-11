@@ -8,12 +8,14 @@ import { Breadcrumbs } from '@/src/components/Breadcrumbs';
 import { CtaBanner } from '@/src/components/CtaBanner';
 import { HeroBanner } from '@/src/components/HeroBanner';
 import { ServiceSchema } from '@/src/components/SchemaMarkup';
+import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset, servicesGridClass } from '@/src/designs/presets';
 
@@ -289,6 +291,17 @@ export default async function ServicesPage({ params }: PageProps) {
           </div>
         )}
       </SectionWrapper>
+
+      <SeoContentSection
+        site={site}
+        seoExtra={content.seoExtra}
+        currentPath="services"
+        relatedLinks={[
+          ...serviceRelatedLinks(services, { limit: 4 }),
+          { label: 'Our story', href: 'about' },
+          { label: 'Get in touch', href: 'contact' },
+        ]}
+      />
 
       {content.cta ? (
         <CtaBanner

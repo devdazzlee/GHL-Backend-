@@ -203,13 +203,15 @@ export function composeSeoMetaDescription({
 export function buildSeoRequirements({ businessName, industry, city, state }) {
   return [
     ' IMPORTANT SEO REQUIREMENTS:',
+    'LENGTH RULES (VERY IMPORTANT — HARD REQUIREMENTS): Every schema word range lower bound is a hard minimum. Undershooting by even 1 word is a failed response. Do not compress long fields to finish short ones.',
     `SEO title MUST be ${SEO_TITLE_MIN}-${SEO_TITLE_MAX} characters (strict minimum ${SEO_TITLE_MIN}).`,
     `SEO meta description MUST be ${SEO_META_MIN}-${SEO_META_MAX} characters (strict minimum ${SEO_META_MIN}).`,
     `Include city name ${city} and state ${state} naturally at least 3 times in body copy.`,
     `Include industry keyword ${industry} naturally at least 4 times in body copy.`,
     `Include business name ${businessName} naturally at least 2 times per section.`,
     `Use long tail keywords related to ${industry} services in ${city}.`,
-    'Write minimum 150 words per paragraph not 60-80.',
+    'Each major body section must meet the schema word ranges — prefer 180+ words per long paragraph.',
+    'Core pages (home about blocks, services intro, contact intro) must deliver at least 300-400 words of unique SEO body copy in total across their main paragraphs.',
     'Add specific details about services offered.',
     `Make content feel local and specific to ${city} ${state}.`,
     'Word counts in the schema are strict minimums — reach the lower bound of every range.',

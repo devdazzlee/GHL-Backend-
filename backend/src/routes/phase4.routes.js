@@ -40,6 +40,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
 
+import { getOrGenerateServicePage } from '../services/servicePage.service.js';
 const router = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -764,45 +765,6 @@ function findServiceBySlug(site, serviceSlug) {
   });
 }
 
-function buildServicePagePrompt(serviceTitle, businessName, industry, city, state) {
-  const seoRequirements = buildSeoRequirements({ businessName, industry, city, state });
-
-  return `Write detailed content for a dedicated service page for ${serviceTitle} offered by ${businessName}, a ${industry} business in ${city}, ${state}.
-Return ONLY valid JSON:
-{
-"heroHeading": "max 10 words including service name and city",
-"heroSubheading": "max 20 words",
-"overview": "150-200 words detailed overview of this specific service",
-"process": [
-{ "step": "Step 1 title max 5 words", "description": "40-60 words" },
-{ "step": "Step 2 title max 5 words", "description": "40-60 words" },
-{ "step": "Step 3 title max 5 words", "description": "40-60 words" },
-{ "step": "Step 4 title max 5 words", "description": "40-60 words" }
-],
-"benefits": [
-{ "title": "max 5 words", "description": "30-40 words" },
-{ "title": "max 5 words", "description": "30-40 words" },
-{ "title": "max 5 words", "description": "30-40 words" },
-{ "title": "max 5 words", "description": "30-40 words" },
-{ "title": "max 5 words", "description": "30-40 words" }
-],
-"faqs": [
-{ "question": "specific question about this service", "answer": "40-60 words" },
-{ "question": "specific question about cost or pricing", "answer": "40-60 words" },
-{ "question": "specific question about timeline or process", "answer": "40-60 words" },
-{ "question": "specific question about why choose this business", "answer": "40-60 words" },
-{ "question": "specific question about service area", "answer": "40-60 words" }
-],
-"whyUs": "80-100 words paragraph about why choose this business for this specific service",
-"seo": {
-"title": "${SEO_TITLE_MIN}-${SEO_TITLE_MAX} characters with service name, business name, and city",
-"metaDescription": "${SEO_META_MIN}-${SEO_META_MAX} characters with service name, city, business name, and call to action"
-}
-}${seoRequirements}`;
-}
-
-const SERVICE_PAGE_OPENAI_TIMEOUT_MS = 20_000;
-
 const servicePageRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,
@@ -817,162 +779,7 @@ const servicePageRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-function isNonEmptyString(value) {
-  return typeof value === 'string' && value.trim().length > 0;
-}
 
-function isValidServicePageContent(content) {
-  if (!content || typeof content !== 'object') return false;
-  if (!isNonEmptyString(content.heroHeading)) return false;
-  if (!isNonEmptyString(content.heroSubheading)) return false;
-  if (!isNonEmptyString(content.overview)) return false;
-  if (!isNonEmptyString(content.whyUs)) return false;
-
-  if (!Array.isArray(content.process) || content.process.length === 0) return false;
-  if (!content.process.every((s) => isNonEmptyString(s?.step) && isNonEmptyString(s?.description))) {
-    return false;
-  }
-
-  if (!Array.isArray(content.benefits) || content.benefits.length === 0) return false;
-  if (!content.benefits.every((b) => isNonEmptyString(b?.title) && isNonEmptyString(b?.description))) {
-    return false;
-  }
-
-  if (!Array.isArray(content.faqs) || content.faqs.length === 0) return false;
-  if (!content.faqs.every((f) => isNonEmptyString(f?.question) && isNonEmptyString(f?.answer))) {
-    return false;
-  }
-
-  if (!content.seo || typeof content.seo !== 'object') return false;
-  if (!isNonEmptyString(content.seo.title) || !isNonEmptyString(content.seo.metaDescription)) {
-    return false;
-  }
-
-  return true;
-}
-
-async function callOpenAiForServicePage(businessName, industry, city, state, serviceTitle) {
-  const apiKey = env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new AppError('OpenAI is not configured.', 503, { code: 'OPENAI_NOT_CONFIGURED' });
-  }
-
-  const systemPrompt =
-    'You are a professional local business content writer. Write detailed, keyword-rich content for a service page. Natural human tone. No corporate buzzwords.';
-  const userPrompt = buildServicePagePrompt(serviceTitle, businessName, industry, city, state);
-
-  const client = new OpenAI({ apiKey, timeout: SERVICE_PAGE_OPENAI_TIMEOUT_MS });
-  const completion = await client.chat.completions.create({
-    model: 'gpt-4o',
-    temperature: 0.7,
-    max_tokens: 2500,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  });
-
-  const raw = completion.choices[0]?.message?.content?.trim();
-  if (!raw) {
-    throw new Error('OpenAI returned empty service page content');
-  }
-
-  return JSON.parse(raw);
-}
-
-async function generateServicePageContent(businessName, industry, city, state, serviceTitle) {
-  let lastError;
-
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const content = await callOpenAiForServicePage(businessName, industry, city, state, serviceTitle);
-      if (!isValidServicePageContent(content)) {
-        throw new Error('OpenAI response failed shape validation');
-      }
-      return content;
-    } catch (e) {
-      lastError = e;
-      console.warn(
-        JSON.stringify({
-          event: 'service_page_generate_retry',
-          serviceTitle,
-          attempt,
-          error: e instanceof Error ? e.message : String(e),
-        }),
-      );
-    }
-  }
-
-  throw lastError ?? new Error(`Failed to generate service page content for "${serviceTitle}"`);
-}
-
-// Coalesces concurrent requests for the same siteId+serviceSlug into a single
-// generation, and upserts so a losing race never throws a unique-constraint error.
-const pendingServicePageGenerations = new Map();
-
-async function generateAndUpsertServicePage(site, serviceSlug, service) {
-  const schema = await getSchemaForIndustry(site.industry);
-  const businessData = {
-    businessName: site.businessName,
-    industry: site.industry,
-    city: site.city,
-    state: site.state,
-    phone: site.phone,
-  };
-
-  let content = await generateServicePageContent(
-    site.businessName,
-    site.industry,
-    site.city,
-    site.state,
-    service.title,
-  );
-
-  content = await ensureSeoMetadata(content, businessData, 'service', schema.systemPrompt, {
-    subjectTitle: service.title,
-  });
-
-  const servicePage = await prisma.servicePage.upsert({
-    where: { siteId_serviceSlug: { siteId: site.id, serviceSlug } },
-    update: { serviceTitle: service.title, content: JSON.stringify(content) },
-    create: {
-      siteId: site.id,
-      serviceSlug,
-      serviceTitle: service.title,
-      content: JSON.stringify(content),
-    },
-  });
-
-  console.info(
-    JSON.stringify({
-      event: 'service_page_generated',
-      siteId: site.id,
-      siteSlug: site.slug,
-      serviceSlug,
-      serviceTitle: service.title,
-    }),
-  );
-
-  return servicePage;
-}
-
-function getOrGenerateServicePage(site, serviceSlug, service) {
-  const lockKey = `${site.id}:${serviceSlug}`;
-  const inFlight = pendingServicePageGenerations.get(lockKey);
-  if (inFlight) {
-    return inFlight;
-  }
-
-  // .finally is chained onto the same promise reference that is stored and
-  // returned, so callers awaiting it remain the sole handler of a rejection.
-  const generation = generateAndUpsertServicePage(site, serviceSlug, service).finally(() => {
-    pendingServicePageGenerations.delete(lockKey);
-  });
-
-  pendingServicePageGenerations.set(lockKey, generation);
-  return generation;
-}
 
 router.get(
   '/sites/:slug/services/:serviceSlug',
