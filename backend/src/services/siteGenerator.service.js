@@ -19,6 +19,7 @@ import {
 } from './contentContract.js';
 import { ContentUnitError, generateUnit, mapPool } from './contentUnit.runner.js';
 import { attachSeoExtra } from './seoExtra.service.js';
+import { attachBlogPostMedia } from './blogMedia.service.js';
 
 const DEFAULT_THEME = {
   primaryColor: '#1F2937',
@@ -475,7 +476,20 @@ async function generateBlogPost(businessData, postOutline, systemPrompt, postInd
     temperature: LENGTH_CRITICAL_TEMPERATURE,
   });
 
-  return { ...body, faqs: faqsPayload.faqs };
+  const composed = { ...body, faqs: faqsPayload.faqs };
+  try {
+    const media = await attachBlogPostMedia(businessData, composed);
+    return { ...composed, ...media };
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'blog_media_attach_skipped',
+        title: composed.title || title,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return { ...composed, coverImageUrl: null, inlineImages: [] };
+  }
 }
 
 async function generateBlogPageContent(businessData, pageSchema, systemPrompt, contextNote) {

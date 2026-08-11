@@ -64,6 +64,12 @@ export type BlogFaq = { question?: string; answer?: string };
 
 export type BlogInternalLink = { label?: string; path?: string };
 
+export type BlogInlineImage = {
+  afterSection?: number;
+  url?: string;
+  alt?: string;
+};
+
 export type BlogPost = {
   title?: string;
   excerpt?: string;
@@ -76,6 +82,10 @@ export type BlogPost = {
   conclusion?: string;
   faqs?: BlogFaq[];
   internalLinks?: BlogInternalLink[];
+  /** Durable Pexels cover image stored on the post (preferred over ephemeral site images). */
+  coverImageUrl?: string | null;
+  /** In-article images placed after H2 sections. */
+  inlineImages?: BlogInlineImage[];
   seo?: SeoContent;
 };
 

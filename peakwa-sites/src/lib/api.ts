@@ -58,16 +58,20 @@ export async function getAllSites(): Promise<GeneratedSite[]> {
 }
 
 export async function getLocationPages(slug: string): Promise<LocationPage[]> {
-  const res = await fetch(
-    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/location-pages`,
-    fetchInit({
-      revalidate: 3600,
-      tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-locations`],
-    }),
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.data?.pages || [];
+  try {
+    const res = await fetch(
+      `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/location-pages`,
+      fetchInit({
+        revalidate: 3600,
+        tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-locations`],
+      }),
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data?.pages || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function getServicePageContent(slug: string, serviceSlug: string) {

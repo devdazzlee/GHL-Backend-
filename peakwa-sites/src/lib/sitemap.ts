@@ -13,7 +13,8 @@ function slugifyService(title: string): string {
 
 function siteLastModified(site: GeneratedSite): Date {
   const raw = (site as { updatedAt?: string }).updatedAt;
-  return raw ? new Date(raw) : new Date();
+  const date = raw ? new Date(raw) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
 /** All public URLs for one generated site — shared by per-site and root sitemaps. */
@@ -51,14 +52,25 @@ export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<Meta
     });
   });
 
-  const locations = await getLocationPages(site.slug);
-  for (const location of locations) {
-    entries.push({
-      url: `${baseUrl}/${location.slug}`,
-      lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.85,
-    });
+  try {
+    const locations = await getLocationPages(site.slug);
+    for (const location of locations) {
+      if (!location?.slug) continue;
+      entries.push({
+        url: `${baseUrl}/${location.slug}`,
+        lastModified,
+        changeFrequency: 'monthly',
+        priority: 0.85,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'sitemap_locations_skipped',
+        slug: site.slug,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 
   return entries;
@@ -66,4 +78,35 @@ export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<Meta
 
 export function rootSitemapUrl(): string {
   return `${SITE_BASE_URL.replace(/\/$/, '')}/sitemap.xml`;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/** Serialize sitemap entries to XML for the per-site route handler. */
+export function entriesToXml(entries: MetadataRoute.Sitemap): string {
+  const urls = entries
+    .map((entry) => {
+      const lastmod =
+        entry.lastModified instanceof Date
+          ? entry.lastModified.toISOString()
+          : entry.lastModified
+            ? new Date(entry.lastModified).toISOString()
+            : new Date().toISOString();
+      const changefreq = entry.changeFrequency
+        ? `\n    <changefreq>${entry.changeFrequency}</changefreq>`
+        : '';
+      const priority =
+        typeof entry.priority === 'number' ? `\n    <priority>${entry.priority}</priority>` : '';
+      return `  <url>\n    <loc>${escapeXml(entry.url)}</loc>\n    <lastmod>${lastmod}</lastmod>${changefreq}${priority}\n  </url>`;
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }

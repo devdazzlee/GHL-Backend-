@@ -67,7 +67,12 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
-  const blogImage = images.blog[index] ?? null;
+  const blogImage = post.coverImageUrl || images.blog[index] || null;
+  const inlineBySection = new Map<number, { url: string; alt?: string }>();
+  for (const image of post.inlineImages ?? []) {
+    if (typeof image?.afterSection !== 'number' || !image.url) continue;
+    inlineBySection.set(image.afterSection, { url: image.url, alt: image.alt });
+  }
 
   const sections = (post.sections ?? []).filter(
     (s) => s && (s.heading || (s.paragraphs?.some((p) => p?.trim()) ?? false)),
@@ -99,6 +104,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         postIndex={index}
         site={site}
         faqs={faqs}
+        imageUrl={blogImage}
         breadcrumbItems={[
           { label: 'Blog', href: `/${slug}/blog` },
           { label: post.title || 'Article' },
@@ -203,6 +209,26 @@ export default async function BlogPostPage({ params }: PageProps) {
                       ))}
                   </div>
                 ))}
+                {inlineBySection.has(i) ? (
+                  <div
+                    className="relative my-8 aspect-[16/9] w-full overflow-hidden"
+                    style={{ borderRadius: 'var(--design-card-radius)' }}
+                  >
+                    <SiteImage
+                      src={inlineBySection.get(i)!.url}
+                      alt={inlineBySection.get(i)!.alt || section.heading || post.title || 'Article image'}
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 768px) 100vw, 768px"
+                      fallback={
+                        <div
+                          className="h-full w-full"
+                          style={{ backgroundColor: colorWithOpacity(theme.primaryColor, 0.12) }}
+                        />
+                      }
+                    />
+                  </div>
+                ) : null}
               </section>
             ))}
 

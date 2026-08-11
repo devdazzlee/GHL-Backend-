@@ -494,9 +494,10 @@ function buildArticleNode(
   businessName: string,
   slug: string,
   postIndex: number,
+  imageUrl?: string | null,
 ): Record<string, unknown> {
   const url = `${SITE_BASE_URL}/${slug}/blog/${postIndex}`;
-  return {
+  const node: Record<string, unknown> = {
     '@type': 'Article',
     '@id': articleSchemaId(slug, postIndex),
     headline: title,
@@ -509,6 +510,8 @@ function buildArticleNode(
     },
     url,
   };
+  if (imageUrl) node.image = imageUrl;
+  return node;
 }
 
 /** Single @graph for a blog post: Article + optional FAQPage + BreadcrumbList. */
@@ -521,6 +524,7 @@ export function BlogPostJsonLd({
   site,
   faqs,
   breadcrumbItems,
+  imageUrl,
 }: {
   title: string;
   excerpt: string;
@@ -530,9 +534,10 @@ export function BlogPostJsonLd({
   site: GeneratedSite;
   faqs?: { question: string; answer: string }[];
   breadcrumbItems: Array<{ label: string; href?: string }>;
+  imageUrl?: string | null;
 }) {
   const nodes: Record<string, unknown>[] = [
-    buildArticleNode(title, excerpt, businessName, slug, postIndex),
+    buildArticleNode(title, excerpt, businessName, slug, postIndex, imageUrl),
     buildBreadcrumbNode(site, breadcrumbItems),
   ];
   const faq = buildFaqNode(faqs ?? []);

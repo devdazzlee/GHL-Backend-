@@ -49,6 +49,15 @@ type LocationPageContent = {
 
 type PageProps = { params: Promise<{ slug: string; locationSlug: string }> };
 
+const RESERVED_LOCATION_SLUGS = new Set([
+  'about',
+  'services',
+  'blog',
+  'contact',
+  'sitemap.xml',
+  'robots.txt',
+]);
+
 function colorWithOpacity(hex: string, opacity: number) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
@@ -68,6 +77,7 @@ function resolveHeroSubheading(content: LocationPageContent, site: GeneratedSite
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, locationSlug } = await params;
+  if (RESERVED_LOCATION_SLUGS.has(locationSlug)) return {};
   const site = await getSiteBySlug(slug);
   if (!site) return {};
 
@@ -88,6 +98,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function LocationPage({ params }: PageProps) {
   const { slug, locationSlug } = await params;
+  if (RESERVED_LOCATION_SLUGS.has(locationSlug)) notFound();
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
 

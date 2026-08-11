@@ -257,7 +257,10 @@ export default async function BlogPage({ params }: PageProps) {
   const sidebarPosts = posts.slice(1, 3);
   const morePosts = posts.slice(3);
 
-  const heroImage = images.hero ?? images.blog[0] ?? null;
+  const postImage = (post: BlogPost | undefined, index: number) =>
+    post?.coverImageUrl || images.blog[index] || null;
+
+  const heroImage = postImage(featuredPost, 0) ?? images.hero ?? null;
   const heroTextColor = heroImage ? '#FFFFFF' : getTextColor(theme.primaryColor);
   const compactHero = design.heroLayout === 'compact' || design.family === 'utility';
   const centeredHero =
@@ -342,7 +345,7 @@ export default async function BlogPage({ params }: PageProps) {
                       post={featuredPost}
                       postIndex={0}
                       slug={slug}
-                      image={images.blog[0] ?? heroImage}
+                      image={postImage(featuredPost, 0) ?? heroImage}
                       accentColor={theme.accentColor}
                       primaryColor={theme.primaryColor}
                     />
@@ -359,7 +362,7 @@ export default async function BlogPage({ params }: PageProps) {
                           post={post}
                           postIndex={postIndex}
                           slug={slug}
-                          image={images.blog[postIndex] ?? null}
+                          image={postImage(post, postIndex)}
                           accentColor={theme.accentColor}
                           primaryColor={theme.primaryColor}
                         />
@@ -387,7 +390,7 @@ export default async function BlogPage({ params }: PageProps) {
                         post={post}
                         postIndex={postIndex}
                         slug={slug}
-                        image={images.blog[postIndex] ?? null}
+                        image={postImage(post, postIndex)}
                         accentColor={theme.accentColor}
                         primaryColor={theme.primaryColor}
                       />
