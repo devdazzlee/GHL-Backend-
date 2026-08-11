@@ -14,6 +14,7 @@ import {
   validateUnit,
   countWords,
   countBlogPostWords,
+  scrubGeneratedContent,
 } from './contentContract.js';
 
 const OPENAI_CONTENT_MODEL = 'gpt-4o';
@@ -115,6 +116,7 @@ export async function generateUnit({
       }
 
       let content = parseJsonContent(raw);
+      content = scrubGeneratedContent(content);
       if (typeof normalize === 'function') {
         content = normalize(content);
       }

@@ -18,6 +18,7 @@ export const FLOORS = Object.freeze({
   homeAboutParagraph: 180,
   aboutStoryParagraph: 200,
   aboutTeamDescription: 140,
+  aboutMissionStatement: 80,
   servicesIntro: 300,
   contactIntro: 300,
   serviceFullDescription: 250,
@@ -39,6 +40,7 @@ export const TARGETS = Object.freeze({
   homeAboutParagraph: { min: 180, max: 220 },
   aboutStoryParagraph: { min: 200, max: 250 },
   aboutTeamDescription: { min: 140, max: 180 },
+  aboutMissionStatement: { min: 90, max: 120 },
   servicesIntro: 320,
   contactIntro: 320,
   serviceFullDescription: { min: 250, max: 300 },
@@ -78,6 +80,41 @@ export const SEO_EXTRA_FAQ_PAGES = Object.freeze([
 export function countWords(text) {
   if (!text || typeof text !== 'string') return 0;
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Strip leaked JSON/code artifacts from model string fields.
+ * Example leak: `...truly special." } ły.`
+ */
+export function scrubGeneratedText(text) {
+  if (typeof text !== 'string') return text;
+  let t = text.replace(/\u0000/g, '').trim();
+  if (!t) return t;
+
+  // Sentence end + stray quote + closing brace + junk
+  t = t.replace(/([.!?])\s*["'`]\s*\}\s*.*$/u, '$1');
+  // Trailing `" } junk` without relying on sentence punctuation
+  t = t.replace(/["'`]\s*\}\s*\S{0,24}\.?\s*$/u, '');
+  // Bare trailing `} junk`
+  t = t.replace(/\s*\}\s*[^\w\s"'`]{0,8}\.?\s*$/u, '');
+  // Orphan brace clusters at end
+  t = t.replace(/\s*[\{\}]+\s*$/u, '');
+  t = t.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+  return t;
+}
+
+/** Deep-scrub all string leaves in generated JSON content. */
+export function scrubGeneratedContent(value) {
+  if (typeof value === 'string') return scrubGeneratedText(value);
+  if (Array.isArray(value)) return value.map((item) => scrubGeneratedContent(item));
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [key, child] of Object.entries(value)) {
+      out[key] = scrubGeneratedContent(child);
+    }
+    return out;
+  }
+  return value;
 }
 
 export function countBlogPostWords(post) {
@@ -230,6 +267,14 @@ export function validateUnit(unitId, content) {
       push('team.description', countWords(content?.description), FLOORS.aboutTeamDescription);
       break;
     }
+    case 'about.mission': {
+      push(
+        'mission.statement',
+        countWords(content?.statement),
+        FLOORS.aboutMissionStatement,
+      );
+      break;
+    }
     case 'services.intro':
     case 'contact.intro': {
       const floor = unitId === 'contact.intro' ? FLOORS.contactIntro : FLOORS.servicesIntro;
@@ -373,6 +418,11 @@ export function validatePageLength(pageType, content) {
     push('story.paragraph1', countWords(content?.story?.paragraph1), FLOORS.aboutStoryParagraph);
     push('story.paragraph2', countWords(content?.story?.paragraph2), FLOORS.aboutStoryParagraph);
     push('team.description', countWords(content?.team?.description), FLOORS.aboutTeamDescription);
+    push(
+      'mission.statement',
+      countWords(content?.mission?.statement),
+      FLOORS.aboutMissionStatement,
+    );
   } else if (pageType === 'services') {
     push('intro', countWords(content?.intro), FLOORS.servicesIntro);
   } else if (pageType === 'contact') {

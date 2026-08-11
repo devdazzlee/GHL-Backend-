@@ -15,6 +15,7 @@ import {
   buildServicesIntroScaffold,
   buildContactIntroScaffold,
   validatePageLength,
+  scrubGeneratedContent,
 } from './contentContract.js';
 import { ContentUnitError, generateUnit, mapPool } from './contentUnit.runner.js';
 import { attachSeoExtra } from './seoExtra.service.js';
@@ -383,7 +384,7 @@ async function callOpenAiForPage(systemPrompt, userPrompt, maxTokens = 2500, opt
 }
 
 function normalizePageStructure(pageType, content) {
-  const result = { ...content };
+  const result = scrubGeneratedContent({ ...content });
 
   if (pageType === 'about') {
     result.story = result.story && typeof result.story === 'object' ? { ...result.story } : {};
@@ -396,6 +397,8 @@ function normalizePageStructure(pageType, content) {
       delete result.paragraph1;
     }
     result.team = result.team && typeof result.team === 'object' ? { ...result.team } : {};
+    result.mission =
+      result.mission && typeof result.mission === 'object' ? { ...result.mission } : {};
   }
 
   if (pageType === 'home') {
@@ -807,6 +810,7 @@ async function generateStructuredPageWithLongUnits(
       buildSeoRequirements(businessData),
       `Return ONLY JSON: { "paragraph1": "${TARGETS.aboutStoryParagraph.min}-${TARGETS.aboutStoryParagraph.max} words", "paragraph2": "${TARGETS.aboutStoryParagraph.min}-${TARGETS.aboutStoryParagraph.max} words" }`,
       `HARD MINIMUM ${FLOORS.aboutStoryParagraph} words per paragraph.`,
+      'Paragraph values must be plain prose only — never include JSON braces, stray quotes, or code artifacts inside the text.',
     ].join(' '),
     maxTokens: 1600,
   });
@@ -823,10 +827,25 @@ async function generateStructuredPageWithLongUnits(
     maxTokens: 800,
   });
 
+  const mission = await generateUnit({
+    unitId: 'about.mission',
+    systemPrompt,
+    userPrompt: [
+      `Write the about page mission statement for ${businessName}, a ${industry} business in ${city}, ${state}.`,
+      buildSeoRequirements(businessData),
+      'Describe purpose, who you serve, and local commitment — concrete, not a slogan.',
+      `Return ONLY JSON: { "statement": "${TARGETS.aboutMissionStatement.min}-${TARGETS.aboutMissionStatement.max} words" }`,
+      `HARD MINIMUM ${FLOORS.aboutMissionStatement} words.`,
+      'Do not include JSON braces, quotes, or code artifacts inside the statement text.',
+    ].join(' '),
+    maxTokens: 600,
+  });
+
   return {
     ...shell,
     story: { ...(shell.story || {}), paragraph1: story.paragraph1, paragraph2: story.paragraph2 },
     team: { ...(shell.team || {}), description: team.description },
+    mission: { ...(shell.mission || {}), statement: mission.statement },
   };
 }
 

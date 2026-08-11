@@ -99,7 +99,10 @@ function buildAboutPageSchema() {
       heading: 'max 6 words',
       description: `${schemaRange('aboutTeamDescription')} about the team, their local expertise, qualifications, and dedication to serving this community`,
     },
-    mission: { heading: 'max 6 words', statement: '30-40 words' },
+    mission: {
+      heading: 'max 6 words',
+      statement: `${schemaRange('aboutMissionStatement')} on the studio's purpose, who it serves in this city, and its long-term commitment — real prose, not a short slogan`,
+    },
     values: [
       { title: 'max 3 words', description: '15-20 words' },
       { title: 'max 3 words', description: '15-20 words' },
