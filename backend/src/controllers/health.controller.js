@@ -9,6 +9,8 @@ export function getHealth(req, res, next) {
         uptimeSeconds: Math.round(process.uptime()),
         environment: env.NODE_ENV,
         timestamp: new Date().toISOString(),
+        // Marker to verify GitHub Actions → VPS auto-deploy
+        deployMarker: 'vps-git-pipeline-ok',
       },
       requestId: req.requestId,
     });
