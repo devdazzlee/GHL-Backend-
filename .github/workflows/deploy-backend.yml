@@ -35,7 +35,19 @@ jobs:
             npx prisma generate
             npx prisma db push
             pm2 restart gbp-backend --update-env
-            sleep 2
-            curl -fsS http://127.0.0.1:4000/health
-            echo
+            # Boot takes a few seconds (googleapis + prisma imports on 1 vCPU),
+            # so poll instead of sleeping a fixed amount.
+            for i in $(seq 1 30); do
+              if curl -fs http://127.0.0.1:4000/health; then
+                echo
+                echo "Health OK after ${i}s"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "Health check failed after 30s; recent logs:"
+                pm2 logs gbp-backend --lines 40 --nostream
+                exit 1
+              fi
+              sleep 1
+            done
             echo "Deploy OK: $(git -C /var/www/GHL-Backend- rev-parse --short HEAD)"
