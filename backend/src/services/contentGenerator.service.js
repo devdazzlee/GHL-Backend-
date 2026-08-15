@@ -13,8 +13,28 @@ function resolveMaxWords(maxPostLength) {
   return Math.min(MAX_POST_LENGTH, Math.max(MIN_POST_LENGTH, Math.round(n)));
 }
 
-function buildSystemPrompt(maxWords) {
-  return `You are a creative local business writer. Your job is to make every single post feel like a completely fresh moment. Never reuse openings, themes or structures from previous posts. If you catch yourself starting with a word you used before, stop and start differently. Be genuinely creative and surprising every time. Write in first person casual tone like a real business owner. No corporate words. No hashtags. No emojis. Under ${maxWords} words. Weave in the requested keyword and call to action naturally, never like an ad.`;
+function buildSystemPrompt({ businessName, city, postTypeLabel, industry, maxWords }) {
+  return `You are writing a Google Business Profile post for ${businessName} in ${city}.
+
+Post type today: ${postTypeLabel}
+
+INFORMATIONAL: Write helpful tips or advice related to ${industry}. Help readers understand or fix a small issue with their ${industry} system. Educational tone. One practical tip. Sound like an expert sharing knowledge.
+
+PROMOTIONAL: Highlight a specific service or seasonal offer from ${businessName}. Create gentle urgency. Include a call to action like call us or book today. Mention the city naturally.
+
+STORY: Write as the business owner sharing a real moment from today. Personal casual tone. Mention a real scenario that happens in a ${industry} business day. Sound genuine.
+
+Rules for all types:
+
+Under ${maxWords} words
+Mention ${businessName} once naturally
+Mention ${city} once
+No hashtags
+No emojis
+No corporate buzzwords
+Sound human not AI
+Never start with the same word as previous posts
+Make it specific to ${industry} not generic`;
 }
 
 const DRAFT_TEMPLATES = [
@@ -60,10 +80,16 @@ const DRAFT_TEMPLATES = [
  * business type used to pick a call to action. New businesses automatically
  * get sensible keywords as long as their category matches one of these
  * patterns; anything unmatched falls back to using the category itself.
+ *
+ * All patterns use \b word boundaries — a bare substring like /car/i would
+ * also match "pet care", "childcare", "daycare" etc. (any word containing
+ * "car"), silently reclassifying an unrelated business as a car dealership.
+ * That's not hypothetical: it's exactly how "pet care" got auto-dealer
+ * keywords and used-car content in testing.
  */
 const CATEGORY_FOCUS_MAP = [
   {
-    match: /hvac|heating|cooling|air condition/i,
+    match: /\bhvac\b|\bheating\b|\bcooling\b|\bair condition/i,
     seasonal: true,
     type: 'service',
     informationalTopics: [
@@ -73,7 +99,7 @@ const CATEGORY_FOCUS_MAP = [
     ],
   },
   {
-    match: /car|auto|vehicle|dealer/i,
+    match: /\bcars?\b|\bauto(?:motive|mobiles?)?s?\b|\bvehicles?\b|\bdealers?(?:hips?)?\b/i,
     keywords: ['used cars', 'auto sales', 'vehicle financing', 'car dealership', 'test drive'],
     type: 'retail',
     informationalTopics: [
@@ -83,7 +109,7 @@ const CATEGORY_FOCUS_MAP = [
     ],
   },
   {
-    match: /internet marketing/i,
+    match: /\binternet marketing\b/i,
     keywords: [
       'digital marketing',
       'SEO services',
@@ -99,7 +125,7 @@ const CATEGORY_FOCUS_MAP = [
     ],
   },
   {
-    match: /marketing|seo|digital|media/i,
+    match: /\bmarketing\b|\bseo\b|\bdigital\b|\bmedia\b/i,
     keywords: [
       'digital marketing',
       'SEO services',
@@ -115,7 +141,7 @@ const CATEGORY_FOCUS_MAP = [
     ],
   },
   {
-    match: /consulting|business service|solutions/i,
+    match: /\bconsulting\b|\bbusiness service\b|\bsolutions\b/i,
     keywords: [
       'business consulting',
       'process optimization',
@@ -221,58 +247,89 @@ function getInformationalTopics(category) {
 }
 
 /**
- * Per-post-type angle so an OFFER reads like an offer and an EVENT like an event.
- * We never invent a specific discount amount or coupon — those come from the
- * location's saved offer config — so the copy stays honest on real listings.
+ * Rotates the post type across INFORMATIONAL / PROMOTIONAL / STORY using the
+ * day of year plus a random seed, so a location isn't stuck writing "today I
+ * did this" story posts on every run. seed is randomized by the caller (see
+ * generatePostContent) so the same day of year doesn't always land on the
+ * same type.
  */
-function getPostTypeAngle(postType, category) {
-  const type = String(postType ?? 'UPDATE').toUpperCase();
-  if (type === 'OFFER') {
-    return {
-      angle:
-        'Frame this as a current special or limited-time savings the business is running right now. Invite people to ask about the current deal. Do NOT invent a specific percentage, dollar amount, or coupon code.',
-      cta: 'Contact us to take advantage of our current offer',
-    };
-  }
-  if (type === 'EVENT') {
-    return {
-      angle:
-        'Frame this around an upcoming happening — a seasonal push, an open house, or a reason to stop by soon. Keep it inviting and time-relevant. Do NOT invent a specific date or time.',
-      cta: 'Stop by or reach out to join us',
-    };
-  }
-  if (type === 'INFORMATIONAL') {
+export function getRotatedPostType(dayOfYear, seed) {
+  const day = Number.isFinite(Number(dayOfYear)) ? Number(dayOfYear) : 0;
+  const rotation = (((day + seed) % 3) + 3) % 3;
+  if (rotation === 0) return 'INFORMATIONAL';
+  if (rotation === 1) return 'PROMOTIONAL';
+  return 'STORY';
+}
+
+/**
+ * Per-post-type angle so an INFORMATIONAL post reads like a tip, a
+ * PROMOTIONAL post reads like an offer, and a STORY post reads like a real
+ * moment. We never invent a specific discount amount or coupon — those come
+ * from the location's saved offer config — so the copy stays honest on real
+ * listings.
+ *
+ * INFORMATIONAL is grounded with every real signal we have on hand — business
+ * name, category, and offer terms — and the model is explicitly told to work
+ * out the business's actual trade from those signals before writing, rather
+ * than trusting `category` alone. `category` is frequently a coarse fallback
+ * label (e.g. "local business") for anything our lightweight classifier
+ * doesn't recognize, and a vague category with no other anchor is what
+ * previously produced generic filler (e.g. workplace-hydration tips) for a
+ * marketing business. This applies uniformly to every business — there is no
+ * per-category branching — so it holds up for categories we've never seen.
+ */
+function getPostTypeAngle(postTypeLabel, category, businessName, offerTerms) {
+  if (postTypeLabel === 'INFORMATIONAL') {
     const topics = getInformationalTopics(category);
     const topicHint =
       topics.length > 0
         ? ` Good example topics for this business: ${topics.join('; ')}. Pick one of these (or a close variation) and go deep on it — do not just list all of them.`
         : ' Pick a genuinely useful, specific educational topic relevant to this business and go deep on it.';
+    const knownSignals = [
+      `business name: "${businessName}"`,
+      category ? `category on file: "${category}"` : null,
+      offerTerms ? `current offer/services on file: "${offerTerms}"` : null,
+    ].filter(Boolean).join('; ');
     return {
       angle:
-        `Write this as an educational tip or how-to post, NOT a personal story or daily-life anecdote — teach the reader something real and useful about this business's services.${topicHint} Structure it like a quick, practical insight a real expert would share: state the tip clearly, then explain briefly why it matters or what to do about it.`,
+        `First, work out the SPECIFIC real-world trade or service this business actually performs. Use everything you know about it: ${knownSignals}. Do not take a vague category (like "local business" or "service") at face value — infer the real, specific service from the business name and any other signal available, the same way a person would guess what a business does from its name and details. Then write this as an educational tip or how-to post, NOT a personal story or daily-life anecdote — teach the reader something real and useful about that SPECIFIC service, not a generic tip that could apply to any small business (no generic workplace, productivity, or wellness advice unless that literally is the business's trade).${topicHint} Structure it like a quick, practical insight a real expert in that specific trade would share: state the tip clearly, then explain briefly why it matters or what to do about it.`,
       cta: '',
     };
   }
-  return { angle: '', cta: '' };
+  if (postTypeLabel === 'PROMOTIONAL') {
+    return {
+      angle:
+        'Highlight a specific service or seasonal offer from the business. Create gentle urgency. Invite people to call or book now. Do NOT invent a specific percentage, dollar amount, or coupon code.',
+      cta: '',
+    };
+  }
+  return {
+    angle:
+      'Write as the business owner sharing a real, specific moment or scenario from today at this business. Personal, casual tone.',
+    cta: '',
+  };
 }
 
 /**
  * Picks a random town from the location's service area for this post so
- * copy doesn't always name the same city. Falls back to the location's
- * home city when serviceAreaTowns is empty or unset.
+ * copy doesn't always name the same city (falls back to the location's home
+ * city when serviceAreaTowns is empty or unset), and surfaces offerTerms —
+ * real, business-specific context already saved on the location — for use as
+ * an extra grounding signal in the prompt (see getPostTypeAngle).
  */
-async function resolvePostCity(locationId, fallbackCity) {
-  if (!locationId) return fallbackCity;
+async function resolveLocationContext(locationId, fallbackCity) {
+  if (!locationId) return { city: fallbackCity, offerTerms: null };
 
   const location = await prisma.location.findUnique({
     where: { id: locationId },
-    select: { serviceAreaTowns: true },
+    select: { serviceAreaTowns: true, offerTerms: true },
   });
 
   const towns = (location?.serviceAreaTowns ?? []).filter((t) => String(t ?? '').trim());
-  if (towns.length === 0) return fallbackCity;
+  const city = towns.length > 0 ? towns[Math.floor(Math.random() * towns.length)] : fallbackCity;
+  const offerTerms = String(location?.offerTerms ?? '').trim() || null;
 
-  return towns[Math.floor(Math.random() * towns.length)];
+  return { city, offerTerms };
 }
 
 function pickTemplate(recentContents, businessName, keyword, city, cta) {
@@ -345,7 +402,7 @@ export async function generatePostContent(
   const maxWords = resolveMaxWords(maxPostLength);
   const name = String(businessName ?? '').trim() || 'Business';
   const fallbackCity = String(city ?? '').trim() || 'this area';
-  const locationCity = await resolvePostCity(locationId, fallbackCity);
+  const { city: locationCity, offerTerms } = await resolveLocationContext(locationId, fallbackCity);
   const categoryLabel = String(category ?? '').trim() || 'local business';
 
   const recentPosts = locationId
@@ -363,13 +420,22 @@ export async function generatePostContent(
       : '(none yet)';
 
   const recentContents = recentPosts.map((p) => p.content);
+  const previousOpeningWord = recentContents[0]
+    ?.trim()
+    .split(/\s+/)[0]
+    ?.replace(/[^\w]/g, '')
+    .toLowerCase();
   const otherBusinessNames = await getOtherBusinessNames(name);
 
   const businessType = getBusinessType(categoryLabel);
   const businessFocus = getBusinessFocus(categoryLabel);
   const primaryKeyword = getPrimaryKeyword(categoryLabel);
-  const isInformational = String(postType ?? '').trim().toUpperCase() === 'INFORMATIONAL';
-  const typeAngle = getPostTypeAngle(postType, categoryLabel);
+
+  const seed = Math.floor(Math.random() * 1000);
+  const postTypeLabel = getRotatedPostType(dayOfYear, seed);
+  const isInformational = postTypeLabel === 'INFORMATIONAL';
+  const isPromotional = postTypeLabel === 'PROMOTIONAL';
+  const typeAngle = getPostTypeAngle(postTypeLabel, categoryLabel, name, offerTerms);
   const cta = typeAngle.cta || getCTA(businessType, primaryKeyword, locationCity);
 
   const draft = pickTemplate(recentContents, name, primaryKeyword, locationCity, cta);
@@ -392,39 +458,45 @@ export async function generatePostContent(
       ? `Naturally include a local keyword phrase such as "${primaryKeyword} ${locationCity}" or "${primaryKeyword} in ${locationCity}" somewhere in the post.`
       : `Naturally include a service or brand style keyword phrase such as "certified ${categoryLabel} specialist" or "professional ${primaryKeyword} service" somewhere in the post.`;
 
+  const toneInstruction = isInformational
+    ? 'Write like a knowledgeable business owner sharing a genuinely useful tip — NOT a personal anecdote or story about today'
+    : isPromotional
+      ? 'Write with confident, inviting energy promoting a specific service or offer — NOT a personal anecdote or story about today'
+      : 'First person casual tone like a real business owner texting a neighbor';
+
+  const structureInstruction = isInformational
+    ? 'Teach something specific and useful — a clear tip, then why it matters or what to do about it'
+    : isPromotional
+      ? 'Highlight the specific service or offer clearly, create gentle urgency, and end with a direct call to action'
+      : 'Feel like a different moment and situation every time';
+
+  const repeatAvoidanceInstruction = isInformational
+    ? 'You must write something completely different from all of the above. Different opening line. Different specific tip or topic. Different structure. Do not repeat a tip or topic already covered above.'
+    : isPromotional
+      ? 'You must write something completely different from all of the above. Different opening word. Different service angle or offer framing. Different sentence structure.'
+      : 'You must write something completely different from all of the above. Different opening word. Different scenario. Different angle. Different sentence structure. Pretend something genuinely new happened today at this business.';
+
   const userPrompt = `You are writing a Google Business Profile post for ${name}, a ${categoryLabel} business in ${locationCity}.
 
-Today is ${currentDayOfWeek} in ${currentMonth}. Post number ${dayOfYear}. Variation seed ${variationSeed}.
+Today is ${currentDayOfWeek} in ${currentMonth}. Post number ${dayOfYear}. Variation seed ${variationSeed}. Post type today: ${postTypeLabel}.
 
 ${seasonalContext}
 
 Business focus for this post: ${businessFocus}
-${typeAngle.angle ? `\nPost type angle (${String(postType).toUpperCase()}): ${typeAngle.angle}\n` : ''}
+${typeAngle.angle ? `\nPost type angle (${postTypeLabel}): ${typeAngle.angle}\n` : ''}
 RECENT POSTS ALREADY WRITTEN — DO NOT REPEAT ANY OF THESE OPENINGS, THEMES, STRUCTURES OR IDEAS:
 ${recentPostsSummary}
 
-${
-    isInformational
-      ? 'You must write something completely different from all of the above. Different opening line. Different specific tip or topic. Different structure. Do not repeat a tip or topic already covered above.'
-      : 'You must write something completely different from all of the above. Different opening word. Different scenario. Different angle. Different sentence structure. Pretend something genuinely new happened today at this business.'
-  }
-
+${repeatAvoidanceInstruction}
+${previousOpeningWord ? `\nHARD RULE: The most recent post started with the word "${previousOpeningWord}". Your post must NOT start with "${previousOpeningWord}" or any close variant of it — pick a completely different opening word.\n` : ''}
 Local SEO requirement: ${keywordStyleInstruction}
 
 Call to action requirement: End the post with a call to action that matches this meaning: "${cta}" (you may rephrase it slightly but keep the same intent and keep it at the very end).
 
 Rules:
-- ${
-    isInformational
-      ? 'Write like a knowledgeable business owner sharing a genuinely useful tip — NOT a personal anecdote or story about today'
-      : 'First person casual tone like a real business owner texting a neighbor'
-  }
+- ${toneInstruction}
 - Must relate specifically to ${businessFocus} with real industry scenarios
-- ${
-    isInformational
-      ? 'Teach something specific and useful — a clear tip, then why it matters or what to do about it'
-      : 'Feel like a different moment and situation every time'
-  }
+- ${structureInstruction}
 - Under ${maxWords} words
 - Mention ${name} naturally once
 - Include the local keyword and the call to action naturally, never like an ad
@@ -441,7 +513,16 @@ Be creative. Surprise me with a fresh angle every single time.`;
       temperature: 0.8,
       max_tokens: Math.min(1000, Math.max(200, Math.round(maxWords * 2.2))),
       messages: [
-        { role: 'system', content: buildSystemPrompt(maxWords) },
+        {
+          role: 'system',
+          content: buildSystemPrompt({
+            businessName: name,
+            city: locationCity,
+            postTypeLabel,
+            industry: categoryLabel,
+            maxWords,
+          }),
+        },
         { role: 'user', content: userPrompt },
       ],
     });
@@ -477,6 +558,15 @@ Be creative. Surprise me with a fresh angle every single time.`;
       return draft;
     }
 
+    console.info(
+      JSON.stringify({
+        event: 'openai_post_generated',
+        businessName: name,
+        locationId,
+        postTypeLabel,
+      }),
+    );
+
     return cleaned;
   } catch (e) {
     console.error(
@@ -486,6 +576,7 @@ Be creative. Surprise me with a fresh angle every single time.`;
         businessName: name,
         locationId,
         postType,
+        postTypeLabel,
       }),
     );
     return draft;
