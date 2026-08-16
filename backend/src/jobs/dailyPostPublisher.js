@@ -224,25 +224,28 @@ export async function runDailyPostPublisher(options = {}) {
     }).format(new Date());
     const { scheduleType, publishType } = getPostTypeForScheduledDay(schedule, weekday);
 
-    const content = await generatePostContent(
-      locationId,
-      businessName,
-      category,
-      'New Jersey',
-      scheduleType,
-      dayOfYear,
-      loc.maxPostLength,
-    );
-
-    const mediaUrl = await resolveDailyPostMediaUrl(
-      locationId,
-      businessName,
-      category,
-      'New Jersey',
-      publishType,
-    );
-
     try {
+      // Inside the try: content generation now fails hard when competitor
+      // research or a required brand mention cannot be satisfied, and that must
+      // stop this location only — not abort the run for every other location.
+      const content = await generatePostContent(
+        locationId,
+        businessName,
+        category,
+        'New Jersey',
+        scheduleType,
+        dayOfYear,
+        loc.maxPostLength,
+      );
+
+      const mediaUrl = await resolveDailyPostMediaUrl(
+        locationId,
+        businessName,
+        category,
+        'New Jersey',
+        publishType,
+      );
+
       const post = await publishLocationWithRetries(loc.id, {
         type: publishType,
         content,
@@ -279,8 +282,13 @@ export async function runDailyPostPublisher(options = {}) {
       const postId = err?.post?.id;
       results.push({
         locationId: loc.id,
+        businessName,
         success: false,
         error: message,
+        // Surfaces WHICH requirement failed (research vs brand mention) rather
+        // than just that something did.
+        ...(err?.code ? { code: err.code } : {}),
+        ...(err?.details ? { details: err.details } : {}),
         ...(postId ? { postId } : {}),
       });
 
@@ -290,6 +298,8 @@ export async function runDailyPostPublisher(options = {}) {
           locationId: loc.id,
           businessName,
           error: message,
+          code: err?.code ?? null,
+          details: err?.details ?? null,
           retriesExhausted: MAX_RETRIES,
         }),
       );
