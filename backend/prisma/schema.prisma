@@ -171,6 +171,12 @@ model SocialPost {
   ghlPostId  String?
   status     SocialPostStatus
   error      String?
+  /// LIVE only: the scheduleDate sent to GHL. The status checker looks for
+  /// GHL-side publish failures once this has passed.
+  scheduledFor  DateTime?
+  lastCheckedAt DateTime?
+  /// Set when the failure alert is sent, so each post alerts at most once.
+  alertedAt     DateTime?
   createdAt  DateTime          @default(now())
 
   @@unique([sourceType, sourceId])

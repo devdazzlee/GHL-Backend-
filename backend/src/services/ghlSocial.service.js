@@ -325,7 +325,11 @@ export async function createGhlSocialPost(location, { summary, mediaUrl, account
   }
 
   const created = response.data?.results?.post ?? {};
-  return { ghlPostId: created._id ?? created.id ?? created.postId ?? null, status: body.status };
+  return {
+    ghlPostId: created._id ?? created.id ?? created.postId ?? null,
+    status: body.status,
+    scheduleDate: body.scheduleDate ?? null,
+  };
 }
 
 async function safeAudit(data) {
@@ -399,7 +403,10 @@ export async function publishSocialForSource(location, source) {
     const existing = await prisma.socialPost.findUnique({
       where: { sourceType_sourceId: { sourceType, sourceId } },
     });
-    if (existing && existing.status !== 'FAILED') {
+    // Once GHL has accepted a post (ghlPostId set) it is never sent again, even
+    // if the status checker later marked it FAILED: some accounts may already
+    // have published it. Only a failure before GHL accepted it can be re-run.
+    if (existing && (existing.status !== 'FAILED' || existing.ghlPostId)) {
       return { skipped: true, reason: 'already_mirrored', socialPostId: existing.id };
     }
 
@@ -440,6 +447,7 @@ export async function publishSocialForSource(location, source) {
       ghlPostId: result.ghlPostId,
       status: 'SENT',
       error: null,
+      scheduledFor: result.scheduleDate ? new Date(result.scheduleDate) : null,
     });
     await safeAudit({
       action: 'SOCIAL_POST_CREATED',
@@ -480,6 +488,7 @@ export async function publishSocialForSource(location, source) {
       mode,
       status: 'FAILED',
       error: message,
+      alertedAt: new Date(),
     });
     await safeAudit({
       action: 'SOCIAL_POST_FAILED',
@@ -489,4 +498,207 @@ export async function publishSocialForSource(location, source) {
     await alertSocialFailure(location, sourceId, message);
     return { success: false, error: message };
   }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Status checker: GHL accepts a LIVE post, then publishes it later per      */
+/* account. Those later failures only show up on GHL's per-account child     */
+/* posts, so SENT rows are checked after their scheduled time.               */
+/* ------------------------------------------------------------------------ */
+
+const STATUS_CHECK_LOOKBACK_HOURS = 24;
+/** Time GHL gets after scheduleDate to finish publishing before we look. */
+const STATUS_CHECK_GRACE_MINUTES = 5;
+const STATUS_CHECK_PAGE_SIZE = 50;
+const STATUS_CHECK_MAX_PAGES = 10;
+
+function scheduledTimeFor(row) {
+  return (
+    row.scheduledFor ??
+    new Date(new Date(row.createdAt).getTime() + LIVE_SCHEDULE_LEAD_MINUTES * 60 * 1000)
+  );
+}
+
+/** LIVE rows GHL accepted in the lookback window that are still marked SENT. */
+export async function findSocialPostsToCheck(now = new Date()) {
+  return prisma.socialPost.findMany({
+    where: {
+      mode: 'LIVE',
+      status: 'SENT',
+      ghlPostId: { not: null },
+      createdAt: { gte: new Date(now.getTime() - STATUS_CHECK_LOOKBACK_HOURS * 3600 * 1000) },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/**
+ * POST /social-media-posting/:locationId/posts/list (read-only search) with
+ * type "failed" for the row's accounts; keeps only children of this post.
+ */
+export async function listFailedChildPosts(location, row, now = new Date()) {
+  const token = requireLocationToken(location);
+  const fromDate = new Date(new Date(row.createdAt).getTime() - 3600 * 1000).toISOString();
+  const toDate = new Date(now.getTime() + 3600 * 1000).toISOString();
+  const failed = [];
+
+  for (let page = 0; page < STATUS_CHECK_MAX_PAGES; page += 1) {
+    const response = await ghlSocialRequest('List Posts', {
+      method: 'post',
+      url: `${GHL_BASE}/social-media-posting/${encodeURIComponent(location.ghlLocationId)}/posts/list`,
+      data: {
+        type: 'failed',
+        accounts: row.accountIds.join(','),
+        skip: String(page * STATUS_CHECK_PAGE_SIZE),
+        limit: String(STATUS_CHECK_PAGE_SIZE),
+        fromDate,
+        toDate,
+        includeUsers: 'false',
+      },
+      headers: socialHeaders(token),
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throwGhlSocialError('List Posts', response);
+    }
+    const posts = Array.isArray(response.data?.results?.posts) ? response.data.results.posts : [];
+    for (const p of posts) {
+      if (p?.parentPostId === row.ghlPostId && String(p.status).toLowerCase() === 'failed') {
+        failed.push(p);
+      }
+    }
+    const total = Number(response.data?.results?.count ?? 0);
+    if (posts.length < STATUS_CHECK_PAGE_SIZE || (page + 1) * STATUS_CHECK_PAGE_SIZE >= total) {
+      break;
+    }
+  }
+  return failed;
+}
+
+function describeChildFailures(location, failedChildren) {
+  const accounts = Array.isArray(location.ghlSocialAccounts) ? location.ghlSocialAccounts : [];
+  return failedChildren
+    .map((p) => {
+      const account = accounts.find((a) => a.id === p.accountId);
+      const label = account ? `${account.platform} "${account.name}"` : p.platform ?? p.accountId;
+      return `GHL could not publish to ${label} (GHL post ${p._id}): ${p.error ?? 'no error given'}`;
+    })
+    .join(' | ');
+}
+
+/**
+ * Checks one SENT row. On a GHL-side failure: marks it FAILED with GHL's
+ * error, audits, and alerts once (alertedAt). Never re-sends anything.
+ * dryRun reports what would happen without writing or alerting.
+ */
+export async function checkSocialPostStatus(row, { location, now = new Date(), dryRun = false } = {}) {
+  const dueAt = new Date(scheduledTimeFor(row).getTime() + STATUS_CHECK_GRACE_MINUTES * 60 * 1000);
+  if (now < dueAt) {
+    return { socialPostId: row.id, result: 'not_due', dueAt };
+  }
+
+  const failedChildren = await listFailedChildPosts(location, row, now);
+
+  if (failedChildren.length === 0) {
+    if (!dryRun) {
+      await prisma.socialPost.update({ where: { id: row.id }, data: { lastCheckedAt: now } });
+    }
+    return { socialPostId: row.id, result: 'no_failures' };
+  }
+
+  const message = describeChildFailures(location, failedChildren);
+  const failedChildIds = failedChildren.map((p) => p._id);
+  const wouldAlert = !row.alertedAt;
+
+  if (dryRun) {
+    return { socialPostId: row.id, result: 'failed', failedChildIds, message, wouldAlert, dryRun: true };
+  }
+
+  const marked = await prisma.socialPost.updateMany({
+    where: { id: row.id, status: 'SENT' },
+    data: { status: 'FAILED', error: message, lastCheckedAt: now },
+  });
+  if (marked.count === 1) {
+    await safeAudit({
+      action: 'SOCIAL_POST_PUBLISH_FAILED',
+      locationId: row.locationId,
+      details: { sourceType: row.sourceType, sourceId: row.sourceId, ghlPostId: row.ghlPostId, failedChildIds, error: message },
+    });
+  }
+
+  // Claim the alert before sending so overlapping runs can't alert twice.
+  const claimed = await prisma.socialPost.updateMany({
+    where: { id: row.id, alertedAt: null },
+    data: { alertedAt: now },
+  });
+  if (claimed.count === 1) {
+    await alertSocialFailure(location, row.sourceId, message);
+  }
+
+  console.error(
+    JSON.stringify({
+      event: 'social_post_publish_failed',
+      locationId: row.locationId,
+      socialPostId: row.id,
+      sourceId: row.sourceId,
+      ghlPostId: row.ghlPostId,
+      failedChildIds,
+      alerted: claimed.count === 1,
+      error: message,
+    }),
+  );
+  return { socialPostId: row.id, result: 'failed', failedChildIds, message, alerted: claimed.count === 1 };
+}
+
+/**
+ * Runs the checker over recent SENT LIVE rows. Never throws; one row's error
+ * (GHL down, missing token) is logged and the rest still run.
+ *
+ * @param {{ now?: Date, dryRun?: boolean, rows?: object[] }} [options] rows overrides the DB lookup
+ */
+export async function runSocialPostStatusCheck({ now = new Date(), dryRun = false, rows } = {}) {
+  const results = [];
+  let candidates = rows;
+  try {
+    candidates = candidates ?? (await findSocialPostsToCheck(now));
+  } catch (e) {
+    console.error(JSON.stringify({ event: 'social_status_check_load_failed', error: e?.message ?? String(e) }));
+    return { checked: 0, results };
+  }
+
+  const locations = new Map();
+  for (const row of candidates) {
+    try {
+      if (!locations.has(row.locationId)) {
+        locations.set(
+          row.locationId,
+          await prisma.location.findUnique({
+            where: { id: row.locationId },
+            include: { business: { select: { name: true } } },
+          }),
+        );
+      }
+      const location = locations.get(row.locationId);
+      if (!location) {
+        results.push({ socialPostId: row.id, result: 'location_missing' });
+        continue;
+      }
+      results.push(await checkSocialPostStatus(row, { location, now, dryRun }));
+    } catch (e) {
+      console.error(
+        JSON.stringify({
+          event: 'social_status_check_row_failed',
+          socialPostId: row.id,
+          error: e?.message ?? String(e),
+          code: e?.code ?? null,
+        }),
+      );
+      results.push({ socialPostId: row.id, result: 'check_error', error: e?.message ?? String(e) });
+    }
+  }
+
+  const failed = results.filter((r) => r.result === 'failed').length;
+  console.info(
+    JSON.stringify({ event: 'social_status_check_complete', checked: candidates.length, failed, dryRun }),
+  );
+  return { checked: candidates.length, failed, results };
 }
