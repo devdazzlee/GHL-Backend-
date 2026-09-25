@@ -14,6 +14,9 @@ const GHL_SOCIAL_VERSION = '2021-07-28';
 /** Minutes ahead of now for LIVE posts, so GHL never sees a past scheduleDate. */
 const LIVE_SCHEDULE_LEAD_MINUTES = 5;
 
+/** Per-request cap so a slow GHL response can't hold up the publish path. */
+const GHL_SOCIAL_TIMEOUT_MS = 20_000;
+
 export const SOCIAL_MODES = ['OFF', 'DRAFT', 'LIVE'];
 export const SOCIAL_SOURCE_GBP_POST = 'GBP_POST';
 
@@ -63,6 +66,39 @@ function throwGhlSocialError(label, response) {
   });
 }
 
+function isTimeoutError(e) {
+  return e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT';
+}
+
+/**
+ * Sends one GHL request with the social timeout. A timeout or network error
+ * becomes an AppError, so callers handle it like any other GHL failure.
+ */
+async function ghlSocialRequest(label, config) {
+  try {
+    return await axios.request({
+      ...config,
+      timeout: GHL_SOCIAL_TIMEOUT_MS,
+      validateStatus: () => true,
+    });
+  } catch (e) {
+    if (isTimeoutError(e)) {
+      throw new AppError(
+        `GHL ${label} timed out after ${GHL_SOCIAL_TIMEOUT_MS / 1000}s` +
+          (config.method === 'post'
+            ? '; the post may still have been created in GHL, check the Social Planner before retrying.'
+            : '.'),
+        504,
+        { code: 'GHL_SOCIAL_TIMEOUT', details: { label, axiosCode: e.code } },
+      );
+    }
+    throw new AppError(`GHL ${label} request failed: ${e?.message ?? String(e)}`, 502, {
+      code: 'GHL_SOCIAL_NETWORK_ERROR',
+      details: { label, axiosCode: e?.code ?? null },
+    });
+  }
+}
+
 async function getLocationOrThrow(locationId) {
   const location = await prisma.location.findUnique({
     where: { id: locationId },
@@ -91,10 +127,11 @@ export function isMirrorAccount(account) {
 /** GET /social-media-posting/:locationId/accounts — all connected accounts. */
 export async function listGhlSocialAccounts(location) {
   const token = requireLocationToken(location);
-  const response = await axios.get(
-    `${GHL_BASE}/social-media-posting/${encodeURIComponent(location.ghlLocationId)}/accounts`,
-    { headers: socialHeaders(token), validateStatus: () => true },
-  );
+  const response = await ghlSocialRequest('Get Accounts', {
+    method: 'get',
+    url: `${GHL_BASE}/social-media-posting/${encodeURIComponent(location.ghlLocationId)}/accounts`,
+    headers: socialHeaders(token),
+  });
   if (response.status < 200 || response.status >= 300) {
     throwGhlSocialError('Get Accounts', response);
   }
@@ -141,10 +178,11 @@ export async function syncSocialAccountsForLocation(locationId) {
 export async function listGhlUsersForLocation(locationId) {
   const location = await getLocationOrThrow(locationId);
   const token = requireLocationToken(location);
-  const response = await axios.get(`${GHL_BASE}/users/`, {
+  const response = await ghlSocialRequest('Get Users', {
+    method: 'get',
+    url: `${GHL_BASE}/users/`,
     params: { locationId: location.ghlLocationId },
     headers: socialHeaders(token),
-    validateStatus: () => true,
   });
   if (response.status < 200 || response.status >= 300) {
     throwGhlSocialError('Get Users', response);
@@ -276,11 +314,12 @@ export async function createGhlSocialPost(location, { summary, mediaUrl, account
       : { status: 'draft' }),
   };
 
-  const response = await axios.post(
-    `${GHL_BASE}/social-media-posting/${encodeURIComponent(location.ghlLocationId)}/posts`,
-    body,
-    { headers: socialHeaders(token), validateStatus: () => true },
-  );
+  const response = await ghlSocialRequest('Create Post', {
+    method: 'post',
+    url: `${GHL_BASE}/social-media-posting/${encodeURIComponent(location.ghlLocationId)}/posts`,
+    data: body,
+    headers: socialHeaders(token),
+  });
   if (response.status < 200 || response.status >= 300) {
     throwGhlSocialError('Create Post', response);
   }
