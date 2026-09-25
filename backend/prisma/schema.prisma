@@ -35,6 +35,20 @@ enum PostStatus {
   FAILED
 }
 
+/// Per-location switch for mirroring posts to Facebook/Instagram through GHL
+/// Social Planner. DRAFT creates GHL drafts only (nothing publishes); LIVE schedules.
+enum SocialPostingMode {
+  OFF
+  DRAFT
+  LIVE
+}
+
+enum SocialPostStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
 enum SiteStatus {
   PENDING
   ACTIVE
@@ -81,6 +95,14 @@ model Location {
   /// generation instead of always using the location's home city. Empty/unset
   /// falls back to the home city.
   serviceAreaTowns   String[]         @default([])
+  /// GHL Social Planner mirroring. Every location starts OFF.
+  socialPostingMode  SocialPostingMode @default(OFF)
+  /// GHL user the social posts are created as (Create Post requires userId).
+  ghlSocialUserId    String?
+  /// Facebook Page + Instagram accounts only: [{ id, platform, type, name }].
+  /// The GBP "location" account is never stored — we post to Google directly.
+  ghlSocialAccounts  Json             @default("[]")
+  ghlSocialAccountsSyncedAt DateTime?
   createdAt          DateTime         @default(now())
   posts              Post[]
   media              Media[]
@@ -129,8 +151,29 @@ model Post {
   postedAt    DateTime?
   status      PostStatus @default(DRAFT)
   platform    String     @default("google")
+  /// Per-post opt-out of the Facebook/Instagram mirror.
+  skipSocial  Boolean    @default(false)
   createdAt   DateTime   @default(now())
 
+  @@index([locationId])
+}
+
+/// One row per social mirror attempt. sourceType is "GBP_POST" today; blogs and
+/// reviews will reuse it with their own sourceType. The unique key stops a
+/// retry or re-approval from posting the same source twice.
+model SocialPost {
+  id         String            @id @default(cuid())
+  locationId String
+  sourceType String
+  sourceId   String
+  mode       SocialPostingMode
+  accountIds String[]          @default([])
+  ghlPostId  String?
+  status     SocialPostStatus
+  error      String?
+  createdAt  DateTime          @default(now())
+
+  @@unique([sourceType, sourceId])
   @@index([locationId])
 }
 

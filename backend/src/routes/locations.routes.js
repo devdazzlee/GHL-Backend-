@@ -4,7 +4,9 @@ import {
   deleteLocationPost,
   getLocationGbp,
   getLocationPost,
+  getLocationSocial,
   listAllPendingPosts,
+  listLocationGhlUsers,
   deleteLocationMedia,
   listLocationMedia,
   listLocationPosts,
@@ -12,11 +14,13 @@ import {
   listLocationsSummary,
   publishLocationPost,
   rejectLocationPost,
+  syncLocationSocialAccounts,
   updateLocationGoogleLocation,
   updateLocationOfferConfig,
   updateLocationPost,
   updateLocationPostLength,
   updateLocationServiceTowns,
+  updateLocationSocial,
   uploadLocationMedia,
 } from '../controllers/locations.controller.js';
 import { parseMediaMultipart } from '../middleware/mediaUpload.js';
@@ -128,6 +132,10 @@ router.patch('/:locationId/service-towns', asyncHandler(updateLocationServiceTow
 router.patch('/:locationId/offer-config', asyncHandler(updateLocationOfferConfig));
 router.patch('/:locationId/post-length', asyncHandler(updateLocationPostLength));
 router.patch('/:locationId/google-location', asyncHandler(updateLocationGoogleLocation));
+router.get('/:locationId/social', asyncHandler(getLocationSocial));
+router.patch('/:locationId/social', asyncHandler(updateLocationSocial));
+router.post('/:locationId/social/sync-accounts', asyncHandler(syncLocationSocialAccounts));
+router.get('/:locationId/social/ghl-users', asyncHandler(listLocationGhlUsers));
 router.get('/:locationId/media', asyncHandler(listLocationMedia));
 router.post(
   '/:locationId/media/upload',

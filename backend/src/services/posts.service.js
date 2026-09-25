@@ -3,6 +3,7 @@ import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
 import { publishLocalPostToGoogle } from './gbp.service.js';
 import { updateLocationCustomFields } from './ghl.service.js';
+import { publishSocialForSource, SOCIAL_SOURCE_GBP_POST } from './ghlSocial.service.js';
 import { enrichPostsWithMedia, getMediaForPost } from './media.service.js';
 
 const POST_TYPES = new Set(['UPDATE', 'OFFER', 'EVENT']);
@@ -95,6 +96,11 @@ function validatePublishBody(body) {
       code: 'INVALID_BODY',
     });
   }
+  if (body.skipSocial != null && typeof body.skipSocial !== 'boolean') {
+    throw new AppError('Field `skipSocial` must be a boolean when provided.', 400, {
+      code: 'INVALID_BODY',
+    });
+  }
 
   let scheduledAt;
   if (Object.prototype.hasOwnProperty.call(body, 'scheduledAt')) {
@@ -118,6 +124,9 @@ function validatePublishBody(body) {
   };
   if (scheduledAt !== undefined) {
     result.scheduledAt = scheduledAt;
+  }
+  if (body.skipSocial != null) {
+    result.skipSocial = body.skipSocial;
   }
   return result;
 }
@@ -143,7 +152,34 @@ async function syncGhlAfterPublish(location, post) {
 }
 
 /**
- * Publishes to GBP (unless MOCK_MODE) and updates GHL custom fields.
+ * Mirrors a PUBLISHED Google post to the location's FB Page + IG through GHL.
+ * Never throws — social failures are handled and alerted inside.
+ */
+async function mirrorPostToSocial(location, post) {
+  // Backstop: an escape here would make the daily job retry and re-post to Google.
+  try {
+    await publishSocialForSource(location, {
+      sourceType: SOCIAL_SOURCE_GBP_POST,
+      sourceId: post.id,
+      summary: post.content,
+      mediaUrl: post.mediaUrl,
+      skipSocial: post.skipSocial,
+    });
+  } catch (e) {
+    console.error(
+      JSON.stringify({
+        event: 'social_mirror_unexpected_error',
+        locationId: location.id,
+        postId: post.id,
+        error: e?.message ?? String(e),
+      }),
+    );
+  }
+}
+
+/**
+ * Publishes to GBP (unless MOCK_MODE), updates GHL custom fields, then mirrors
+ * to social. A Google failure throws before social is attempted.
  */
 async function executeExternalPublish(location, post) {
   if (!env.MOCK_MODE) {
@@ -154,6 +190,7 @@ async function executeExternalPublish(location, post) {
     });
   }
   await syncGhlAfterPublish(location, post);
+  await mirrorPostToSocial(location, post);
 }
 
 async function getLocationOrThrow(locationId) {
@@ -184,7 +221,13 @@ async function getPendingPostOrThrow(locationId, postId) {
  * Publishes a post (or queues for approval), persists Post + AuditLog, returns saved Post.
  */
 export async function publishPostForLocation(locationId, body) {
-  const { type, content, mediaUrl: bodyMediaUrl, scheduledAt } = validatePublishBody(body);
+  const {
+    type,
+    content,
+    mediaUrl: bodyMediaUrl,
+    scheduledAt,
+    skipSocial,
+  } = validatePublishBody(body);
   const location = await getLocationOrThrow(locationId);
   const mediaUrl = bodyMediaUrl ?? (await getMediaForPost(locationId, type));
 
@@ -200,6 +243,7 @@ export async function publishPostForLocation(locationId, body) {
             status: 'PENDING',
             platform: 'google',
             ...(scheduledAt !== undefined ? { scheduledAt } : {}),
+            ...(skipSocial !== undefined ? { skipSocial } : {}),
           },
         }),
         prisma.auditLog.create({
@@ -254,6 +298,7 @@ export async function publishPostForLocation(locationId, body) {
           postedAt: published ? now : null,
           platform: 'google',
           ...(effectiveScheduledAt !== undefined ? { scheduledAt: effectiveScheduledAt } : {}),
+          ...(skipSocial !== undefined ? { skipSocial } : {}),
         },
       }),
       prisma.auditLog.create({
@@ -276,6 +321,9 @@ export async function publishPostForLocation(locationId, body) {
     ]);
 
     await syncGhlAfterPublish(location, post);
+    if (published) {
+      await mirrorPostToSocial(location, post);
+    }
     return post;
   } catch (e) {
     if (e?.name === 'PrismaClientKnownRequestError') {
@@ -407,7 +455,7 @@ export async function updatePostForLocation(locationId, postId, body) {
     throw new AppError('Post not found.', 404, { code: 'POST_NOT_FOUND' });
   }
 
-  const { type, content, mediaUrl, scheduledAt } = validatePublishBody(body);
+  const { type, content, mediaUrl, scheduledAt, skipSocial } = validatePublishBody(body);
 
   const updated = await prisma.$transaction(async (tx) => {
     const post = await tx.post.update({
@@ -417,6 +465,7 @@ export async function updatePostForLocation(locationId, postId, body) {
         content,
         mediaUrl,
         ...(scheduledAt !== undefined ? { scheduledAt } : {}),
+        ...(skipSocial !== undefined ? { skipSocial } : {}),
       },
     });
     await tx.auditLog.create({

@@ -81,6 +81,74 @@ export async function sendFailureAlert(locationId, businessName, error) {
   return info;
 }
 
+/**
+ * Sends an alert when mirroring a post to Facebook/Instagram via GHL fails.
+ * The Google post itself is unaffected by this failure.
+ */
+export async function sendSocialPostFailureAlert(locationId, businessName, error, postId) {
+  const timestamp = new Date().toISOString();
+  const subject = `Social Post Failed - ${businessName}`;
+  const text = [
+    'Mirroring a post to Facebook/Instagram through GHL Social Planner failed.',
+    'The Google Business Profile post was not affected.',
+    '',
+    `Location ID: ${locationId}`,
+    `Business: ${businessName}`,
+    `Post ID: ${postId ?? 'n/a'}`,
+    `Error: ${error}`,
+    `Timestamp: ${timestamp}`,
+  ].join('\n');
+
+  if (env.MOCK_MODE) {
+    console.info(
+      JSON.stringify({
+        event: 'social_failure_alert_mock',
+        locationId,
+        businessName,
+        postId,
+        error,
+        timestamp,
+        subject,
+      }),
+    );
+    return { mock: true };
+  }
+
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS || !env.ALERT_EMAIL_FROM || !env.ALERT_EMAIL_TO) {
+    console.warn(
+      JSON.stringify({
+        event: 'social_failure_alert_skipped',
+        reason: 'SMTP or alert email env not configured',
+        locationId,
+        businessName,
+        postId,
+        error,
+      }),
+    );
+    return { skipped: true };
+  }
+
+  const transporter = createTransporter();
+  const info = await transporter.sendMail({
+    from: env.ALERT_EMAIL_FROM,
+    to: env.ALERT_EMAIL_TO,
+    subject,
+    text,
+  });
+
+  console.info(
+    JSON.stringify({
+      event: 'social_failure_alert_sent',
+      locationId,
+      businessName,
+      postId,
+      messageId: info.messageId,
+    }),
+  );
+
+  return info;
+}
+
 const GOOGLE_CONNECTION_ALERT_EMAIL = 'ahmedrazagithub@gmail.com';
 
 /**

@@ -48,6 +48,7 @@ export async function listAllLocations() {
     offerCouponCode: loc.offerCouponCode,
     offerTerms: loc.offerTerms,
     offerRedeemUrl: loc.offerRedeemUrl,
+    socialPostingMode: loc.socialPostingMode,
   }));
 }
 

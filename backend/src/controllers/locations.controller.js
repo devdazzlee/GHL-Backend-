@@ -22,7 +22,50 @@ import {
   rejectPostForLocation,
   updatePostForLocation,
 } from '../services/posts.service.js';
+import {
+  getSocialSettings,
+  listGhlUsersForLocation,
+  syncSocialAccountsForLocation,
+  updateSocialSettings,
+} from '../services/ghlSocial.service.js';
 import { AppError } from '../utils/AppError.js';
+
+export async function getLocationSocial(req, res, next) {
+  try {
+    const data = await getSocialSettings(req.params.locationId);
+    return res.json({ success: true, data, requestId: req.requestId });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/** Body: { socialPostingMode?: 'OFF' | 'DRAFT' | 'LIVE', ghlSocialUserId?: string | null } */
+export async function updateLocationSocial(req, res, next) {
+  try {
+    const data = await updateSocialSettings(req.params.locationId, req.body ?? {});
+    return res.json({ success: true, data, requestId: req.requestId });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function syncLocationSocialAccounts(req, res, next) {
+  try {
+    const data = await syncSocialAccountsForLocation(req.params.locationId);
+    return res.json({ success: true, data, requestId: req.requestId });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function listLocationGhlUsers(req, res, next) {
+  try {
+    const users = await listGhlUsersForLocation(req.params.locationId);
+    return res.json({ success: true, data: { users }, requestId: req.requestId });
+  } catch (e) {
+    next(e);
+  }
+}
 
 export async function listLocations(req, res, next) {
   try {
