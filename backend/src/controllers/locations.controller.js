@@ -24,7 +24,6 @@ import {
 } from '../services/posts.service.js';
 import {
   getSocialSettings,
-  listGhlUsersForLocation,
   syncSocialAccountsForLocation,
   updateSocialSettings,
 } from '../services/ghlSocial.service.js';
@@ -39,10 +38,18 @@ export async function getLocationSocial(req, res, next) {
   }
 }
 
-/** Body: { socialPostingMode?: 'OFF' | 'DRAFT' | 'LIVE', ghlSocialUserId?: string | null } */
+/**
+ * Body: { socialPostingMode?: 'OFF' | 'DRAFT' | 'LIVE', ghlSocialUserId?: string | null,
+ *         facebookEnabled?: boolean, instagramEnabled?: boolean, changedBy?: string }
+ * changedBy is self-reported; the audit entry also records request id, IP and user agent.
+ */
 export async function updateLocationSocial(req, res, next) {
   try {
-    const data = await updateSocialSettings(req.params.locationId, req.body ?? {});
+    const data = await updateSocialSettings(req.params.locationId, req.body ?? {}, {
+      requestId: req.requestId,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     return res.json({ success: true, data, requestId: req.requestId });
   } catch (e) {
     next(e);
@@ -53,15 +60,6 @@ export async function syncLocationSocialAccounts(req, res, next) {
   try {
     const data = await syncSocialAccountsForLocation(req.params.locationId);
     return res.json({ success: true, data, requestId: req.requestId });
-  } catch (e) {
-    next(e);
-  }
-}
-
-export async function listLocationGhlUsers(req, res, next) {
-  try {
-    const users = await listGhlUsersForLocation(req.params.locationId);
-    return res.json({ success: true, data: { users }, requestId: req.requestId });
   } catch (e) {
     next(e);
   }

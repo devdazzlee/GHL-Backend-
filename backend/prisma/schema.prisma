@@ -103,6 +103,10 @@ model Location {
   /// The GBP "location" account is never stored — we post to Google directly.
   ghlSocialAccounts  Json             @default("[]")
   ghlSocialAccountsSyncedAt DateTime?
+  /// Per-platform switches under socialPostingMode (the master switch).
+  /// Read when each post is made; posts already scheduled in GHL are unaffected.
+  socialFacebookEnabled  Boolean @default(true)
+  socialInstagramEnabled Boolean @default(true)
   createdAt          DateTime         @default(now())
   posts              Post[]
   media              Media[]
@@ -177,6 +181,9 @@ model SocialPost {
   lastCheckedAt DateTime?
   /// Set when the failure alert is sent, so each post alerts at most once.
   alertedAt     DateTime?
+  /// Per-platform outcome: { facebook: { accountId, status, error?, ghlChildPostId?, at }, instagram: {...} }
+  /// status is SENT | FAILED | DISABLED. Null on rows from before this field.
+  platformResults Json?
   createdAt  DateTime          @default(now())
 
   @@unique([sourceType, sourceId])

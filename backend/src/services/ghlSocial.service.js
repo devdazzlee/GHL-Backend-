@@ -3,6 +3,18 @@ import { env } from '../config/env.js';
 import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
 import { sendSocialPostFailureAlert } from './alert.service.js';
+import {
+  applyChildFailures,
+  buildActor,
+  diffSocialSettings,
+  legacyPlatformResults,
+  platformResultsOnFailure,
+  platformResultsOnSend,
+  selectTargets,
+  SOCIAL_MODES,
+  summarizePlatforms,
+  validateSocialSettingsChange,
+} from './socialPlatforms.js';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 /**
@@ -17,7 +29,7 @@ const LIVE_SCHEDULE_LEAD_MINUTES = 5;
 /** Per-request cap so a slow GHL response can't hold up the publish path. */
 const GHL_SOCIAL_TIMEOUT_MS = 20_000;
 
-export const SOCIAL_MODES = ['OFF', 'DRAFT', 'LIVE'];
+export { SOCIAL_MODES };
 export const SOCIAL_SOURCE_GBP_POST = 'GBP_POST';
 
 const MIME_BY_EXT = {
@@ -244,70 +256,53 @@ export async function listGhlUsersForLocation(locationId) {
   }));
 }
 
+/** How many recent rows feed the per-platform "last result". */
+const SETTINGS_RECENT_ROWS = 25;
+
 export async function getSocialSettings(locationId) {
   const location = await getLocationOrThrow(locationId);
   const recent = await prisma.socialPost.findMany({
     where: { locationId },
     orderBy: { createdAt: 'desc' },
-    take: 10,
+    take: SETTINGS_RECENT_ROWS,
   });
   return {
     locationId,
     socialPostingMode: location.socialPostingMode,
     ghlSocialUserId: location.ghlSocialUserId,
-    ghlSocialAccounts: location.ghlSocialAccounts,
-    ghlSocialAccountsSyncedAt: location.ghlSocialAccountsSyncedAt,
     hasLocationGhlKey: Boolean(location.ghlApiKey?.trim()),
-    recentSocialPosts: recent,
+    ghlSocialAccountsSyncedAt: location.ghlSocialAccountsSyncedAt,
+    platforms: summarizePlatforms(location, recent),
+    ghlSocialAccounts: location.ghlSocialAccounts,
+    recentSocialPosts: recent.slice(0, 10),
   };
 }
 
 /**
- * Updates the per-business switch and/or GHL user. Turning social on (DRAFT or
- * LIVE) requires a chosen user and at least one synced FB/IG account.
+ * Updates the master switch, the GHL user and/or the per-platform switches.
+ * Every real change writes one SOCIAL_SETTINGS_UPDATED audit entry (in the same
+ * transaction) with before/after values and the request's actor. Changes apply
+ * to future posts only; nothing already scheduled in GHL is edited.
+ *
+ * @param {{ requestId?: string, ip?: string, userAgent?: string, changedBy?: string }} [actorInfo]
  */
-export async function updateSocialSettings(locationId, body = {}) {
+export async function updateSocialSettings(locationId, body = {}, actorInfo = {}) {
   const location = await getLocationOrThrow(locationId);
-  const data = {};
+  const data = validateSocialSettingsChange(location, body);
+  const changes = diffSocialSettings(location, data);
 
-  if (body.ghlSocialUserId !== undefined) {
-    const userId = String(body.ghlSocialUserId ?? '').trim();
-    data.ghlSocialUserId = userId || null;
+  if (Object.keys(changes).length > 0) {
+    await prisma.$transaction([
+      prisma.location.update({ where: { id: locationId }, data }),
+      prisma.auditLog.create({
+        data: {
+          action: 'SOCIAL_SETTINGS_UPDATED',
+          locationId,
+          details: { changes, actor: buildActor({ ...actorInfo, changedBy: body.changedBy }) },
+        },
+      }),
+    ]);
   }
-
-  if (body.socialPostingMode !== undefined) {
-    const mode = String(body.socialPostingMode).trim().toUpperCase();
-    if (!SOCIAL_MODES.includes(mode)) {
-      throw new AppError(`socialPostingMode must be one of: ${SOCIAL_MODES.join(', ')}.`, 400, {
-        code: 'INVALID_BODY',
-      });
-    }
-    data.socialPostingMode = mode;
-  }
-
-  const nextMode = data.socialPostingMode ?? location.socialPostingMode;
-  if (nextMode !== 'OFF') {
-    const nextUserId =
-      data.ghlSocialUserId !== undefined ? data.ghlSocialUserId : location.ghlSocialUserId;
-    const accounts = Array.isArray(location.ghlSocialAccounts) ? location.ghlSocialAccounts : [];
-    if (!location.ghlApiKey?.trim()) {
-      throw new AppError('Location has no GHL API key; cannot enable social posting.', 400, {
-        code: 'GHL_SOCIAL_TOKEN_MISSING',
-      });
-    }
-    if (!nextUserId) {
-      throw new AppError('Set ghlSocialUserId before enabling social posting.', 400, {
-        code: 'GHL_SOCIAL_USER_MISSING',
-      });
-    }
-    if (accounts.length === 0) {
-      throw new AppError('Sync social accounts before enabling social posting.', 400, {
-        code: 'GHL_SOCIAL_ACCOUNTS_MISSING',
-      });
-    }
-  }
-
-  await prisma.location.update({ where: { id: locationId }, data });
   return getSocialSettings(locationId);
 }
 
@@ -321,15 +316,17 @@ function guessMimeType(url) {
 }
 
 /**
- * Picks stored FB/IG account ids. Instagram cannot take a text-only post, so it
- * is dropped when there is no image. Google is filtered again here as a guard.
+ * Picks FB/IG accounts to post to: Google and expired are filtered again here
+ * as a guard, switched-off platforms are dropped, and Instagram is dropped
+ * when there is no image.
  */
+function selectTargetsForLocation(location, accounts, { hasImage }) {
+  const mirrorable = (Array.isArray(accounts) ? accounts : []).filter(isMirrorAccount);
+  return selectTargets(mirrorable, location, { hasImage });
+}
+
 export function selectTargetAccountIds(location, { hasImage }) {
-  const stored = Array.isArray(location.ghlSocialAccounts) ? location.ghlSocialAccounts : [];
-  return stored
-    .filter(isMirrorAccount)
-    .filter((a) => hasImage || String(a.platform).toLowerCase() !== 'instagram')
-    .map((a) => a.id);
+  return selectTargetsForLocation(location, location.ghlSocialAccounts, { hasImage }).accountIds;
 }
 
 /**
@@ -441,6 +438,7 @@ async function alertSocialFailure(location, sourceId, message) {
 export async function publishSocialForSource(location, source) {
   const { sourceType, sourceId, summary, mediaUrl = null, skipSocial = false } = source;
   const mode = location?.socialPostingMode ?? 'OFF';
+  let selection = null;
 
   try {
     if (mode === 'OFF') {
@@ -477,10 +475,36 @@ export async function publishSocialForSource(location, source) {
     }
 
     const current = await resolveCurrentMirrorAccounts(location);
-    const accountIds = selectTargetAccountIds(
-      { ...location, ghlSocialAccounts: current.accounts },
-      { hasImage: Boolean(mediaUrl) },
-    );
+    selection = selectTargetsForLocation(location, current.accounts, {
+      hasImage: Boolean(mediaUrl),
+    });
+    const { accountIds } = selection;
+
+    // Every connected platform is switched off: a deliberate setting, not a
+    // failure, so it is recorded as SKIPPED with no alert.
+    if (selection.allDisabled) {
+      const reason = 'All connected platforms are disabled for this location';
+      await recordSocialPost({
+        locationId: location.id,
+        sourceType,
+        sourceId,
+        mode,
+        status: 'SKIPPED',
+        error: reason,
+        platformResults: platformResultsOnSend([], selection.disabledPlatforms, current.accounts, new Date()),
+      });
+      console.info(
+        JSON.stringify({
+          event: 'social_post_skipped_platforms_disabled',
+          locationId: location.id,
+          sourceType,
+          sourceId,
+          disabledPlatforms: selection.disabledPlatforms,
+        }),
+      );
+      return { skipped: true, reason: 'platforms_disabled', disabledPlatforms: selection.disabledPlatforms };
+    }
+
     if (accountIds.length === 0) {
       throw new AppError('No Facebook Page or Instagram account available to post to.', 400, {
         code: 'GHL_SOCIAL_ACCOUNTS_MISSING',
@@ -503,6 +527,12 @@ export async function publishSocialForSource(location, source) {
       status: 'SENT',
       error: null,
       scheduledFor: result.scheduleDate ? new Date(result.scheduleDate) : null,
+      platformResults: platformResultsOnSend(
+        selection.targets,
+        selection.disabledPlatforms,
+        current.accounts,
+        new Date(),
+      ),
     });
     await safeAudit({
       action: 'SOCIAL_POST_CREATED',
@@ -516,6 +546,7 @@ export async function publishSocialForSource(location, source) {
         accountIds,
         accountsSource: current.source,
         expiredSkipped: current.expired.map((a) => `${a.platform}:${a.name}`),
+        disabledPlatforms: selection.disabledPlatforms,
       },
     });
     console.info(
@@ -553,6 +584,9 @@ export async function publishSocialForSource(location, source) {
       status: 'FAILED',
       error: message,
       alertedAt: new Date(),
+      platformResults: selection?.targets?.length
+        ? platformResultsOnFailure(selection.targets, message, new Date())
+        : null,
     });
     await safeAudit({
       action: 'SOCIAL_POST_FAILED',
@@ -673,13 +707,29 @@ export async function checkSocialPostStatus(row, { location, now = new Date(), d
   const failedChildIds = failedChildren.map((p) => p._id);
   const wouldAlert = !row.alertedAt;
 
+  const accounts = Array.isArray(location.ghlSocialAccounts) ? location.ghlSocialAccounts : [];
+  const platformResults = applyChildFailures(
+    row.platformResults ?? legacyPlatformResults({ ...row, status: 'SENT', error: null }, accounts),
+    failedChildren,
+    accounts,
+    now,
+  );
+
   if (dryRun) {
-    return { socialPostId: row.id, result: 'failed', failedChildIds, message, wouldAlert, dryRun: true };
+    return {
+      socialPostId: row.id,
+      result: 'failed',
+      failedChildIds,
+      message,
+      platformResults,
+      wouldAlert,
+      dryRun: true,
+    };
   }
 
   const marked = await prisma.socialPost.updateMany({
     where: { id: row.id, status: 'SENT' },
-    data: { status: 'FAILED', error: message, lastCheckedAt: now },
+    data: { status: 'FAILED', error: message, lastCheckedAt: now, platformResults },
   });
   if (marked.count === 1) {
     await safeAudit({

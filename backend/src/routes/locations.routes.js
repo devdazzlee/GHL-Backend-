@@ -6,7 +6,6 @@ import {
   getLocationPost,
   getLocationSocial,
   listAllPendingPosts,
-  listLocationGhlUsers,
   deleteLocationMedia,
   listLocationMedia,
   listLocationPosts,
@@ -135,7 +134,6 @@ router.patch('/:locationId/google-location', asyncHandler(updateLocationGoogleLo
 router.get('/:locationId/social', asyncHandler(getLocationSocial));
 router.patch('/:locationId/social', asyncHandler(updateLocationSocial));
 router.post('/:locationId/social/sync-accounts', asyncHandler(syncLocationSocialAccounts));
-router.get('/:locationId/social/ghl-users', asyncHandler(listLocationGhlUsers));
 router.get('/:locationId/media', asyncHandler(listLocationMedia));
 router.post(
   '/:locationId/media/upload',
