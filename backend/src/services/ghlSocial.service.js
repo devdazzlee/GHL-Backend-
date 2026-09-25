@@ -145,6 +145,17 @@ export async function listGhlSocialAccounts(location) {
  */
 export async function syncSocialAccountsForLocation(locationId) {
   const location = await getLocationOrThrow(locationId);
+  const { kept, excluded } = await refreshMirrorAccounts(location);
+  return { locationId, kept, excluded };
+}
+
+/**
+ * Fetches the location's accounts from GHL, keeps only FB Page + IG (Google
+ * and expired accounts are excluded by isMirrorAccount), and stores the result.
+ * Used by sync-accounts and before every social post, so a reconnected account
+ * with a new ID is picked up without a manual sync.
+ */
+async function refreshMirrorAccounts(location) {
   const accounts = await listGhlSocialAccounts(location);
 
   const summarize = (a) => ({
@@ -156,22 +167,58 @@ export async function syncSocialAccountsForLocation(locationId) {
   });
   const kept = accounts.filter(isMirrorAccount).map(summarize);
   const excluded = accounts.filter((a) => !isMirrorAccount(a)).map(summarize);
+  const expired = excluded.filter(
+    (a) => a.isExpired && ['facebook', 'instagram'].includes(String(a.platform).toLowerCase()),
+  );
 
   await prisma.location.update({
-    where: { id: locationId },
+    where: { id: location.id },
     data: { ghlSocialAccounts: kept, ghlSocialAccountsSyncedAt: new Date() },
   });
 
   console.info(
     JSON.stringify({
       event: 'ghl_social_accounts_synced',
-      locationId,
+      locationId: location.id,
       kept: kept.map((a) => `${a.platform}:${a.name}`),
       excluded: excluded.map((a) => `${a.platform}:${a.type}:${a.name}`),
     }),
   );
 
-  return { locationId, kept, excluded };
+  return { kept, excluded, expired };
+}
+
+/**
+ * Accounts to post to right now: a fresh Get Accounts when GHL answers, else
+ * the stored list (a GHL blip shouldn't block the post; if the stored IDs are
+ * stale, Create Post fails and alerts as usual).
+ */
+async function resolveCurrentMirrorAccounts(location) {
+  try {
+    const { kept, expired } = await refreshMirrorAccounts(location);
+    if (expired.length > 0) {
+      console.warn(
+        JSON.stringify({
+          event: 'social_accounts_expired_skipped',
+          locationId: location.id,
+          expired: expired.map((a) => `${a.platform}:${a.name}:${a.id}`),
+        }),
+      );
+    }
+    return { accounts: kept, source: 'fresh', expired };
+  } catch (e) {
+    console.warn(
+      JSON.stringify({
+        event: 'social_accounts_refresh_failed',
+        locationId: location.id,
+        error: e?.message ?? String(e),
+        code: e?.code ?? null,
+        usingStored: true,
+      }),
+    );
+    const stored = Array.isArray(location.ghlSocialAccounts) ? location.ghlSocialAccounts : [];
+    return { accounts: stored, source: 'stored', expired: [] };
+  }
 }
 
 /** GET /users/?locationId= — for choosing ghlSocialUserId. Needs users.readonly. */
@@ -429,10 +476,18 @@ export async function publishSocialForSource(location, source) {
       return { skipped: true, reason: 'mock_mode' };
     }
 
-    const accountIds = selectTargetAccountIds(location, { hasImage: Boolean(mediaUrl) });
+    const current = await resolveCurrentMirrorAccounts(location);
+    const accountIds = selectTargetAccountIds(
+      { ...location, ghlSocialAccounts: current.accounts },
+      { hasImage: Boolean(mediaUrl) },
+    );
     if (accountIds.length === 0) {
       throw new AppError('No Facebook Page or Instagram account available to post to.', 400, {
         code: 'GHL_SOCIAL_ACCOUNTS_MISSING',
+        details: {
+          accountsSource: current.source,
+          expiredSkipped: current.expired.map((a) => `${a.platform}:${a.name}`),
+        },
       });
     }
 
@@ -452,7 +507,16 @@ export async function publishSocialForSource(location, source) {
     await safeAudit({
       action: 'SOCIAL_POST_CREATED',
       locationId: location.id,
-      details: { sourceType, sourceId, mode, ghlStatus: result.status, ghlPostId: result.ghlPostId, accountIds },
+      details: {
+        sourceType,
+        sourceId,
+        mode,
+        ghlStatus: result.status,
+        ghlPostId: result.ghlPostId,
+        accountIds,
+        accountsSource: current.source,
+        expiredSkipped: current.expired.map((a) => `${a.platform}:${a.name}`),
+      },
     });
     console.info(
       JSON.stringify({
