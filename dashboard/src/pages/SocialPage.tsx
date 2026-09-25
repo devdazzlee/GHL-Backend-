@@ -38,11 +38,13 @@ function writeChangedBy(value: string) {
 interface ToggleProps {
   checked: boolean;
   disabled?: boolean;
+  /** Still clickable, but drawn grey because it has no effect right now. */
+  muted?: boolean;
   label: string;
   onChange: (next: boolean) => void;
 }
 
-function Toggle({ checked, disabled, label, onChange }: ToggleProps) {
+function Toggle({ checked, disabled, muted, label, onChange }: ToggleProps) {
   return (
     <button
       type="button"
@@ -53,7 +55,7 @@ function Toggle({ checked, disabled, label, onChange }: ToggleProps) {
       onClick={() => onChange(!checked)}
       className={cn(
         'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-        checked ? 'bg-emerald-600' : 'bg-slate-700',
+        checked ? (muted ? 'bg-slate-500 opacity-60' : 'bg-emerald-600') : 'bg-slate-700',
       )}
     >
       <span
@@ -85,10 +87,12 @@ interface PlatformRowProps {
   platform: SocialPlatform;
   status: SocialPlatformStatus;
   busy: boolean;
+  /** Master switch is OFF: nothing posts, whatever this platform's switch says. */
+  paused: boolean;
   onToggle: (next: boolean) => void;
 }
 
-function PlatformRow({ platform, status, busy, onToggle }: PlatformRowProps) {
+function PlatformRow({ platform, status, busy, paused, onToggle }: PlatformRowProps) {
   const label = PLATFORM_LABEL[platform];
   // Turning on an unconnected platform is refused by the API; turning it off is always allowed.
   const cannotEnable = !status.connected && !status.enabled;
@@ -104,11 +108,18 @@ function PlatformRow({ platform, status, busy, onToggle }: PlatformRowProps) {
               <span className="text-amber-300">Not connected in GHL</span>
             )}
           </p>
+          {paused ? (
+            <p className="text-xs text-slate-500">
+              Paused, social posting is off
+              {status.enabled ? ' (will post when turned on)' : ''}
+            </p>
+          ) : null}
         </div>
         <Toggle
           checked={status.enabled}
           disabled={busy || cannotEnable}
-          label={`${label} posting`}
+          muted={paused}
+          label={`${label} posting${paused ? ' (paused while social posting is off)' : ''}`}
           onChange={onToggle}
         />
       </div>
@@ -199,6 +210,7 @@ function BusinessCard({ businessName, locationId, changedBy }: BusinessCardProps
               platform={platform}
               status={settings.platforms[platform]}
               busy={busy}
+              paused={mode === 'OFF'}
               onToggle={(on) =>
                 void save(platform === 'facebook' ? { facebookEnabled: on } : { instagramEnabled: on })
               }
