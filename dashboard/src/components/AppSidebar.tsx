@@ -12,6 +12,7 @@ import {
   Send,
   PlayCircle,
   Settings2,
+  Share2,
   SlidersHorizontal,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/posts', label: 'Posts', icon: ClipboardList },
   { to: '/daily-job', label: 'Run Daily Job', icon: PlayCircle },
   { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
+  { to: '/social', label: 'Social Posting', icon: Share2 },
   { to: '/ghl-status', label: 'GHL Status', icon: Settings2 },
   { to: '/media', label: 'Media Library', icon: Image },
   { to: '/approval', label: 'Approval Queue', icon: CalendarClock },
