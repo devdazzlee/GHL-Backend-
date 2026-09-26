@@ -23,8 +23,13 @@ const GHL_BASE = 'https://services.leadconnectorhq.com';
  */
 const GHL_SOCIAL_VERSION = '2021-07-28';
 
-/** Minutes ahead of now for LIVE posts, so GHL never sees a past scheduleDate. */
-const LIVE_SCHEDULE_LEAD_MINUTES = 5;
+/**
+ * Minutes ahead of now for a LIVE post's scheduleDate. GHL rejected a 5-minute
+ * lead in production ("Schedule Date must be after current date") even with
+ * the server clock in sync with GHL's; ~9 minutes worked in testing. 15 leaves
+ * margin for clock drift and GHL's undocumented minimum.
+ */
+export const LIVE_SCHEDULE_LEAD_MINUTES = 15;
 
 /** Per-request cap so a slow GHL response can't hold up the publish path. */
 const GHL_SOCIAL_TIMEOUT_MS = 20_000;
@@ -342,6 +347,7 @@ export async function createGhlSocialPost(location, { summary, mediaUrl, account
     });
   }
 
+  const now = Date.now();
   const body = {
     accountIds,
     summary,
@@ -351,12 +357,22 @@ export async function createGhlSocialPost(location, { summary, mediaUrl, account
     ...(mode === 'LIVE'
       ? {
           status: 'scheduled',
-          scheduleDate: new Date(
-            Date.now() + LIVE_SCHEDULE_LEAD_MINUTES * 60 * 1000,
-          ).toISOString(),
+          scheduleDate: new Date(now + LIVE_SCHEDULE_LEAD_MINUTES * 60 * 1000).toISOString(),
         }
       : { status: 'draft' }),
   };
+
+  if (mode === 'LIVE') {
+    console.info(
+      JSON.stringify({
+        event: 'ghl_social_post_scheduling',
+        locationId: location.id,
+        leadMinutes: LIVE_SCHEDULE_LEAD_MINUTES,
+        serverNow: new Date(now).toISOString(),
+        scheduleDate: body.scheduleDate,
+      }),
+    );
+  }
 
   const response = await ghlSocialRequest('Create Post', {
     method: 'post',
@@ -373,6 +389,7 @@ export async function createGhlSocialPost(location, { summary, mediaUrl, account
     ghlPostId: created._id ?? created.id ?? created.postId ?? null,
     status: body.status,
     scheduleDate: body.scheduleDate ?? null,
+    leadMinutes: mode === 'LIVE' ? LIVE_SCHEDULE_LEAD_MINUTES : null,
   };
 }
 
@@ -543,6 +560,8 @@ export async function publishSocialForSource(location, source) {
         mode,
         ghlStatus: result.status,
         ghlPostId: result.ghlPostId,
+        scheduleDate: result.scheduleDate,
+        scheduleLeadMinutes: result.leadMinutes,
         accountIds,
         accountsSource: current.source,
         expiredSkipped: current.expired.map((a) => `${a.platform}:${a.name}`),
