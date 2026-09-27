@@ -2,7 +2,7 @@ import { cache } from 'react';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config/config';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { ALL_SITES_CACHE_TAG, siteCacheTag } from '@/src/lib/siteCache';
-import type { GeneratedSite, LocationPage } from './types';
+import type { GeneratedSite, KeywordPageDetail, KeywordPageSummary, LocationPage } from './types';
 
 type FetchCacheOptions = {
   revalidate: number;
@@ -117,4 +117,28 @@ export async function getServicePageContent(slug: string, serviceSlug: string) {
   if (!res || !res.ok) return null;
   const data = await res.json();
   return data.data?.content || null;
+}
+
+/** Published keyword pages for a site (city-page links and sitemap). */
+export async function getPublishedKeywordPages(slug: string): Promise<KeywordPageSummary[]> {
+  const res = await fetchApi(
+    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-keyword-pages`,
+    fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-keywords`] }),
+  );
+  if (!res || !res.ok) return [];
+  const data = await res.json();
+  return data.data?.pages ?? [];
+}
+
+export async function getPublishedKeywordPage(
+  slug: string,
+  keywordSlug: string,
+): Promise<KeywordPageDetail | null> {
+  const res = await fetchApi(
+    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-keyword-pages/${encodeURIComponent(keywordSlug)}`,
+    fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-keywords`] }),
+  );
+  if (!res || !res.ok) return null;
+  const data = await res.json();
+  return data.data?.page ?? null;
 }

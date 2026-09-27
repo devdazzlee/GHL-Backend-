@@ -37,6 +37,14 @@ import {
 import { listContactSubmissions } from '../services/contactSubmission.service.js';
 import { deliverLeadToGhl } from '../services/siteLeads.service.js';
 import {
+  deleteKeywordPage,
+  generateKeywordPages,
+  getPublishedKeywordPage,
+  listKeywordPages,
+  listPublishedKeywordPages,
+  setKeywordPagePublished,
+} from '../services/keywordPage.service.js';
+import {
   createTemplate,
   deleteTemplate,
   getAllTemplates,
@@ -1460,6 +1468,72 @@ router.delete(
       },
       requestId: req.requestId,
     });
+  }),
+);
+
+// ---- Keyword pages (on request only; never part of the automatic build) ----
+
+router.get(
+  '/sites/:siteId/keyword-pages',
+  asyncHandler(async (req, res) => {
+    const pages = await listKeywordPages(req.params.siteId);
+    return res.json({ success: true, data: { pages }, requestId: req.requestId });
+  }),
+);
+
+/** Body: { keywords: string | string[], locationPageIds: string[] }. Creates DRAFTs. */
+router.post(
+  '/sites/:siteId/keyword-pages',
+  asyncHandler(async (req, res) => {
+    const result = await generateKeywordPages(req.params.siteId, {
+      keywords: req.body?.keywords,
+      locationPageIds: req.body?.locationPageIds,
+    });
+    return res.status(201).json({ success: true, data: result, requestId: req.requestId });
+  }),
+);
+
+router.post(
+  '/sites/:siteId/keyword-pages/:id/publish',
+  asyncHandler(async (req, res) => {
+    const page = await setKeywordPagePublished(req.params.siteId, req.params.id, true);
+    await revalidateSiteById(req.params.siteId);
+    return res.json({ success: true, data: { page }, requestId: req.requestId });
+  }),
+);
+
+router.post(
+  '/sites/:siteId/keyword-pages/:id/unpublish',
+  asyncHandler(async (req, res) => {
+    const page = await setKeywordPagePublished(req.params.siteId, req.params.id, false);
+    await revalidateSiteById(req.params.siteId);
+    return res.json({ success: true, data: { page }, requestId: req.requestId });
+  }),
+);
+
+router.delete(
+  '/sites/:siteId/keyword-pages/:id',
+  asyncHandler(async (req, res) => {
+    const page = await deleteKeywordPage(req.params.siteId, req.params.id);
+    await revalidateSiteById(req.params.siteId);
+    return res.json({ success: true, data: { deleted: true, slug: page.slug }, requestId: req.requestId });
+  }),
+);
+
+/** Renderer: published keyword pages only (drafts never leave the admin API). */
+router.get(
+  '/sites/:slug/published-keyword-pages',
+  asyncHandler(async (req, res) => {
+    const pages = await listPublishedKeywordPages(req.params.slug);
+    return res.json({ success: true, data: { pages }, requestId: req.requestId });
+  }),
+);
+
+router.get(
+  '/sites/:slug/published-keyword-pages/:keywordSlug',
+  asyncHandler(async (req, res) => {
+    const page = await getPublishedKeywordPage(req.params.slug, req.params.keywordSlug);
+    return res.json({ success: true, data: { page }, requestId: req.requestId });
   }),
 );
 

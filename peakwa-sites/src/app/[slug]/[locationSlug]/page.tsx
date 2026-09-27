@@ -10,7 +10,8 @@ import { HeroBanner } from '@/src/components/HeroBanner';
 import { FAQSchema, LocationAreaSchema } from '@/src/components/SchemaMarkup';
 import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
-import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
+import Link from 'next/link';
+import { getLocationPages, getPublishedKeywordPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type SeoExtraContent, type ServicesContent } from '@/src/lib/content';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { hexToRgb, resolveTheme } from '@/src/lib/theme';
@@ -50,6 +51,7 @@ type LocationPageContent = {
 type PageProps = { params: Promise<{ slug: string; locationSlug: string }> };
 
 const RESERVED_LOCATION_SLUGS = new Set([
+  'k',
   'about',
   'services',
   'blog',
@@ -107,6 +109,9 @@ export default async function LocationPage({ params }: PageProps) {
   if (!page) notFound();
 
   const content = parseJson<LocationPageContent>(page.content, {});
+  const keywordPages = (await getPublishedKeywordPages(slug)).filter(
+    (k) => k.locationPage?.slug === locationSlug,
+  );
   const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
@@ -371,6 +376,29 @@ export default async function LocationPage({ params }: PageProps) {
           { label: 'Get in touch', href: 'contact' },
         ]}
       />
+
+      {keywordPages.length > 0 ? (
+        <SectionWrapper background={nextSectionBg(false)} className={pad}>
+          <div className="mx-auto max-w-3xl">
+            <h2 className={clsx('text-2xl font-bold text-gray-900', headingAlignClass(design))}>
+              More about our services in {page.city}
+            </h2>
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+              {keywordPages.map((k) => (
+                <li key={k.slug}>
+                  <Link
+                    href={`/${slug}/k/${k.slug}`}
+                    className="font-medium underline"
+                    style={{ color: theme.accentColor }}
+                  >
+                    {k.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </SectionWrapper>
+      ) : null}
 
       <CtaBanner
         site={site}

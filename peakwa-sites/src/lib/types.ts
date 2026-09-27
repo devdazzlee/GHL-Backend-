@@ -50,3 +50,32 @@ export type LocationPage = {
   content: string | null;
   imageUrl: string | null;
 };
+
+/** A published keyword + city page, as listed for links and the sitemap. */
+export type KeywordPageSummary = {
+  slug: string;
+  keyword: string;
+  title: string;
+  locationPageId: string;
+  publishedAt: string | null;
+  locationPage: { slug: string; city: string };
+};
+
+export type KeywordPageContent = {
+  seo?: { title?: string; metaDescription?: string };
+  h1?: string;
+  intro?: string;
+  sections?: Array<{ heading?: string; paragraphs?: string[] }>;
+  localNotes?: string[];
+  faqs?: Array<{ question?: string; answer?: string }>;
+  ctaHeading?: string;
+  ctaText?: string;
+};
+
+export type KeywordPageDetail = {
+  slug: string;
+  keyword: string;
+  publishedAt: string | null;
+  content: KeywordPageContent;
+  locationPage: { slug: string; city: string; county: string; state: string };
+};
