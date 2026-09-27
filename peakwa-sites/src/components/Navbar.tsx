@@ -211,10 +211,15 @@ export function Navbar({
               )}
             </button>
             <Link href={base} className="mx-auto flex min-w-0 items-center gap-2">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: theme.accentColor }}
-              />
+              {site.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- logo host is set per site in the dashboard
+                <img src={site.logoUrl} alt={`${site.businessName} logo`} className="h-9 w-auto max-w-[140px] shrink-0 object-contain" />
+              ) : (
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: theme.accentColor }}
+                />
+              )}
               <span className="truncate text-lg font-bold tracking-tight" style={{ color: brandColor }}>
                 {site.businessName}
               </span>
@@ -234,10 +239,15 @@ export function Navbar({
           )}
         >
           <Link href={base} className="flex min-w-0 items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: theme.accentColor }}
-            />
+            {site.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- logo host is set per site in the dashboard
+              <img src={site.logoUrl} alt={`${site.businessName} logo`} className="h-9 w-auto max-w-[140px] shrink-0 object-contain" />
+            ) : (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: theme.accentColor }}
+              />
+            )}
             <span className="truncate text-lg font-bold tracking-tight" style={{ color: brandColor }}>
               {site.businessName}
             </span>

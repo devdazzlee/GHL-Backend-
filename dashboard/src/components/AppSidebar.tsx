@@ -5,7 +5,6 @@ import {
   Database,
   Globe,
   Image,
-  Layout,
   LayoutDashboard,
   Mail,
   Palette,
@@ -31,7 +30,6 @@ const navItems = [
 ];
 
 const phase4NavItems = [
-  { to: '/templates', label: 'Templates', icon: Layout },
   { to: '/designs', label: 'Designs', icon: Palette },
   { to: '/sites', label: 'Generated Sites', icon: Globe },
   { to: '/industry-schemas', label: 'Industry Schemas', icon: Database },
