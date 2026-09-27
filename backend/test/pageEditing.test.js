@@ -1,5 +1,5 @@
 import './helpers/env.js';
-import { beforeEach, describe, it } from 'node:test';
+import { beforeEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import prisma from '../src/database/client.js';
 import { classifyRequest } from '../src/middleware/phase4Auth.js';
@@ -12,7 +12,14 @@ import {
   withRecordedEdits,
   withServicePageEdits,
 } from '../src/services/siteContentEdits.service.js';
-import { getStoredSiteImages, listImageSlots, setSiteImage } from '../src/services/siteImages.service.js';
+import {
+  PICK_COOLDOWN_MS,
+  PexelsRateLimitError,
+  getStoredSiteImages,
+  listImageSlots,
+  resetImagePickState,
+  setSiteImage,
+} from '../src/services/siteImages.service.js';
 
 // ---- In-memory stand-in for the Prisma calls these services make ----
 
@@ -183,7 +190,10 @@ function countingPicker() {
 }
 
 describe('page images', () => {
-  beforeEach(() => stubPrisma());
+  beforeEach(() => {
+    stubPrisma();
+    resetImagePickState();
+  });
 
   it('picks each image once and then keeps it (no more daily random pictures)', async () => {
     const picker = countingPicker();
@@ -255,6 +265,70 @@ describe('editor routes and keys', () => {
       ['GET', '/sites/abc/stock-photos'],
     ]) {
       assert.equal(classifyRequest(method, path), 'admin', `${method} ${path}`);
+    }
+  });
+});
+
+describe('automatic picks under the Pexels rate limit', () => {
+  beforeEach(() => {
+    stubPrisma();
+    resetImagePickState();
+  });
+
+  /** Succeeds `okCalls` times, then answers like Pexels does under a burst (HTTP 429). */
+  function limitedPicker(okCalls) {
+    const calls = [];
+    const fn = async (_site, slot) => {
+      calls.push(slot.id);
+      if (calls.length > okCalls) throw new PexelsRateLimitError();
+      return `https://images.pexels.com/auto/${slot.id.replace(':', '-')}.jpg`;
+    };
+    return Object.assign(fn, { calls });
+  }
+
+  it('picks one at a time, stops at the first 429, keeps what it got and backs off', async () => {
+    const picker = limitedPicker(2);
+    const images = await getStoredSiteImages({ ...site }, { autoPickFn: picker, background: false });
+    assert.deepEqual(picker.calls, ['hero', 'about', 'service:0'], 'stopped right after the 429');
+    assert.ok(images.hero && images.about);
+    assert.equal(images.services[0], null);
+    const stored = JSON.parse(site.imagesContent);
+    assert.ok(stored.hero.url && stored.about.url);
+
+    // During the cooldown nothing is sent to Pexels at all.
+    await getStoredSiteImages({ ...site }, { autoPickFn: picker, background: false });
+    assert.equal(picker.calls.length, 3);
+  });
+
+  it('page renders at the same moment share one pick run', async () => {
+    const picker = limitedPicker(100);
+    const snapshot = { ...site };
+    await Promise.all([1, 2, 3, 4].map(() => getStoredSiteImages(snapshot, { autoPickFn: picker, background: false })));
+    assert.equal(picker.calls.length, 7, 'each empty slot picked once, not once per request');
+  });
+
+  it('fills the rest in the background after the cooldown', async () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+    try {
+      let allow = 2;
+      const calls = [];
+      const picker = async (_site, slot) => {
+        calls.push(slot.id);
+        if (allow <= 0) throw new PexelsRateLimitError();
+        allow -= 1;
+        return `https://images.pexels.com/auto/${slot.id.replace(':', '-')}.jpg`;
+      };
+      await getStoredSiteImages({ ...site }, { autoPickFn: picker });
+      assert.equal(Object.keys(JSON.parse(site.imagesContent).services).length, 0);
+
+      allow = 100; // the limit has passed
+      mock.timers.tick(PICK_COOLDOWN_MS + 60_000);
+      for (let i = 0; i < 20; i += 1) await new Promise((resolve) => process.nextTick(resolve));
+      const stored = JSON.parse(site.imagesContent);
+      assert.equal(Object.keys(stored.services).length, 2, 'both services got a picture');
+      assert.equal(stored.blog.filter(Boolean).length, 3);
+    } finally {
+      mock.timers.reset();
     }
   });
 });
