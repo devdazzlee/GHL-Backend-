@@ -590,6 +590,27 @@ export async function addLocationPagesByRadius(
   return data.data.pages;
 }
 
+export interface RadiusTown {
+  city: string;
+  county: string;
+  state: string;
+  miles: number;
+  zips: string[];
+  hasPage: boolean;
+  isBusinessCity: boolean;
+}
+
+/** Real towns within a ZIP radius (no generation). */
+export async function previewRadiusTowns(
+  siteId: string,
+  params: { zipCode: string; radiusMiles: number },
+): Promise<{ origin: { zip: string; city: string; county: string; state: string }; towns: RadiusTown[] }> {
+  const { data } = await api.get<
+    ApiResponse<{ origin: { zip: string; city: string; county: string; state: string }; towns: RadiusTown[] }>
+  >(`/phase4/sites/${siteId}/location-pages/radius-preview`, { params });
+  return data.data;
+}
+
 export async function deletePhase4Site(id: string): Promise<{ message: string; siteId: string }> {
   const { data } = await api.delete<
     ApiResponse<{ message: string; siteId: string }>

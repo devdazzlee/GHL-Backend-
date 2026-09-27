@@ -15,6 +15,7 @@ import {
 } from './contentContract.js';
 import { ContentUnitError, generateUnit } from './contentUnit.runner.js';
 import { attachSeoExtra, buildSeoExtraLinkTargets } from './seoExtra.service.js';
+import { findTownsWithinRadius } from './zipRadius.service.js';
 
 const OPENAI_CONTENT_MODEL = 'gpt-4o';
 
@@ -513,7 +514,10 @@ export async function generateLocationPages(siteId, locations) {
 export async function generateLocationPagesByRadius(siteId, { zipCode, radiusMiles, maxLocations = 8 }) {
   const zip = String(zipCode ?? '').trim();
   const radius = Number(radiusMiles);
-  const limit = Math.min(Math.max(Number(maxLocations) || 8, 1), 20);
+  // Pages generated per request (each is several AI calls; the dashboard request
+  // times out after 5 minutes). Use the preview to see every town in range and
+  // run more batches: towns that already have a page are skipped.
+  const limit = Math.min(Math.max(Number(maxLocations) || 8, 1), 25);
 
   if (!/^\d{5}(-\d{4})?$/.test(zip)) {
     throw new AppError('Field `zipCode` must be a valid US ZIP code.', 400, {
@@ -537,30 +541,10 @@ export async function generateLocationPagesByRadius(siteId, { zipCode, radiusMil
   });
   const existingCities = new Set(existingPages.map((p) => p.city.toLowerCase()));
 
-  const userPrompt = [
-    `Find up to ${limit} real cities or towns within about ${radius} miles of ZIP code ${zip}`,
-    `(primary state context: ${site.state}).`,
-    `This is for a ${site.industry} business based in ${site.city}, ${site.state}.`,
-    'Return ONLY valid JSON:',
-    '{ "locations": [{ "city": "real place name", "county": "accurate county name", "state": "two-letter state", "approxMiles": number }] }',
-    'Use genuine place names inside the radius. Do not invent places.',
-    `Exclude "${site.city}" if it is the same as the business city proper.`,
-    'Order by closest first.',
-  ].join(' ');
-
-  let discovered = [];
-  try {
-    const parsed = await callOpenAi(
-      'You are a US geography assistant. Return only accurate city/county data as JSON.',
-      userPrompt,
-      1200,
-    );
-    discovered = Array.isArray(parsed?.locations) ? parsed.locations : [];
-  } catch (e) {
-    throw new AppError(e?.message ?? 'Failed to discover cities for this ZIP radius.', 502, {
-      code: 'RADIUS_DISCOVERY_FAILED',
-    });
-  }
+  // Real ZIP/place data and a distance calculation (no AI guessing of towns).
+  const { towns } = findTownsWithinRadius(zip, radius);
+  const siteCity = String(site.city ?? '').trim().toLowerCase();
+  const discovered = towns.filter((t) => t.city.toLowerCase() !== siteCity);
 
   const locations = discovered
     .map((loc) => ({
@@ -606,4 +590,26 @@ export async function generateLocationPagesByRadius(siteId, { zipCode, radiusMil
   }
 
   return createdPages;
+}
+
+/**
+ * Every real town within the radius (no AI, no generation), flagged when the
+ * site already has a page for it. Backs the dashboard "Preview towns" step.
+ */
+export async function previewRadiusTowns(siteId, { zipCode, radiusMiles }) {
+  const site = await prisma.generatedSite.findUnique({ where: { id: siteId }, select: { id: true, city: true } });
+  if (!site) {
+    throw new AppError('Generated site not found.', 404, { code: 'SITE_NOT_FOUND' });
+  }
+  const existing = await prisma.locationPage.findMany({ where: { siteId }, select: { city: true } });
+  const have = new Set(existing.map((p) => p.city.toLowerCase()));
+  const { origin, towns } = findTownsWithinRadius(zipCode, radiusMiles);
+  return {
+    origin,
+    towns: towns.map((t) => ({
+      ...t,
+      hasPage: have.has(t.city.toLowerCase()),
+      isBusinessCity: t.city.toLowerCase() === String(site.city ?? '').trim().toLowerCase(),
+    })),
+  };
 }

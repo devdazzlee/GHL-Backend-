@@ -3,6 +3,8 @@ import { Loader2, ExternalLink, MapPin, Minus, Pencil, Plus, RefreshCw, Search, 
 import {
   addLocationPages,
   addLocationPagesByRadius,
+  previewRadiusTowns,
+  type RadiusTown,
   addPhase4Service,
   deletePhase4Service,
   deletePhase4Site,
@@ -476,6 +478,26 @@ export function GeneratedSitesPage() {
   const [locationRows, setLocationRows] = useState<Phase4LocationInput[]>([emptyLocationRow()]);
   const [radiusZip, setRadiusZip] = useState('');
   const [radiusMiles, setRadiusMiles] = useState('15');
+  const [radiusPreview, setRadiusPreview] = useState<RadiusTown[] | null>(null);
+  const [previewingTowns, setPreviewingTowns] = useState(false);
+
+  async function handlePreviewTowns() {
+    if (!selectedSite) return;
+    setPreviewingTowns(true);
+    setError(null);
+    try {
+      const { towns } = await previewRadiusTowns(selectedSite.id, {
+        zipCode: radiusZip.trim(),
+        radiusMiles: Number(radiusMiles),
+      });
+      setRadiusPreview(towns);
+    } catch (err) {
+      setRadiusPreview(null);
+      setError(err instanceof Error ? err.message : 'Failed to preview towns');
+    } finally {
+      setPreviewingTowns(false);
+    }
+  }
   const [addingLocations, setAddingLocations] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Phase4GeneratedSite | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -1949,6 +1971,36 @@ export function GeneratedSitesPage() {
                     className={inputClass}
                     placeholder="15"
                   />
+                </div>
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={previewingTowns || !radiusZip.trim()}
+                    onClick={() => void handlePreviewTowns()}
+                  >
+                    {previewingTowns ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Preview towns
+                  </Button>
+                  {radiusPreview ? (
+                    <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-800 p-2 text-xs">
+                      <p className="mb-2 text-slate-400">
+                        {radiusPreview.length} real towns in range (ZIP data, nearest first).
+                        Generating adds up to 8 new pages per run; towns that already have a page are skipped.
+                      </p>
+                      {radiusPreview.map((t) => (
+                        <div key={`${t.city}-${t.county}-${t.state}`} className="flex justify-between gap-2 py-0.5">
+                          <span className="text-slate-200">
+                            {t.city}, {t.county} County, {t.state}
+                          </span>
+                          <span className="shrink-0 text-slate-500">
+                            {t.miles} mi{t.hasPage ? ' · has page' : ''}{t.isBusinessCity ? ' · business city' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (

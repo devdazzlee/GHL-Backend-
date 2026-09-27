@@ -14,7 +14,11 @@ import {
 import { createSmtpTransporter } from '../services/email.service.js';
 import { scheduleSiteFinalization } from '../services/sitePostProcessing.service.js';
 import { revalidateSiteFrontendCache } from '../services/siteRevalidation.service.js';
-import { generateLocationPages, generateLocationPagesByRadius } from '../services/locationPage.service.js';
+import {
+  generateLocationPages,
+  generateLocationPagesByRadius,
+  previewRadiusTowns,
+} from '../services/locationPage.service.js';
 import {
   generatePageContent,
   generateSite,
@@ -1275,6 +1279,18 @@ router.post(
       data: { pages },
       requestId: req.requestId,
     });
+  }),
+);
+
+/** Real towns within a ZIP radius, before generating any pages (admin only). */
+router.get(
+  '/sites/:siteId/location-pages/radius-preview',
+  asyncHandler(async (req, res) => {
+    const data = await previewRadiusTowns(req.params.siteId, {
+      zipCode: String(req.query.zipCode ?? req.query.zip ?? '').trim(),
+      radiusMiles: Number(req.query.radiusMiles ?? req.query.radius ?? 0),
+    });
+    return res.json({ success: true, data, requestId: req.requestId });
   }),
 );
 
