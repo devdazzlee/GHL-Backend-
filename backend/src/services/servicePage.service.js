@@ -2,6 +2,7 @@
  * Dedicated per-service page generation via contract units (fail closed).
  */
 
+import { withServicePageEdits } from './siteContentEdits.service.js';
 import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
 import { getSchemaForIndustry } from './industrySchema.service.js';
@@ -219,6 +220,9 @@ export async function generateAndUpsertServicePage(site, serviceSlug, service) {
     }
     throw e;
   }
+
+  // Hand edits made in the dashboard survive regeneration of this page.
+  content = withServicePageEdits(site.contentEdits, serviceSlug, content);
 
   const servicePage = await prisma.servicePage.upsert({
     where: { siteId_serviceSlug: { siteId: site.id, serviceSlug } },
