@@ -1136,10 +1136,8 @@ router.get(
   }),
 );
 
-router.post(
-  '/webhook',
-  webhookRateLimiter,
-  asyncHandler(async (req, res) => {
+/** Creates (or returns the existing) site for an intake payload. */
+async function handleSiteGenerationRequest(req, res) {
     const body = req.body ?? {};
     validateWebhookBody(body);
 
@@ -1175,8 +1173,16 @@ router.post(
       data: { slug: site.slug, site },
       requestId: req.requestId,
     });
-  }),
-);
+}
+
+/** Public intake for the order form (caller being confirmed; see phase4Auth). */
+router.post('/webhook', webhookRateLimiter, asyncHandler(handleSiteGenerationRequest));
+
+/**
+ * Dashboard "Form Submission (Test)": same generation, admin key required
+ * (any /phase4 route not listed as public/renderer/webhook is admin-only).
+ */
+router.post('/admin/generate-site', asyncHandler(handleSiteGenerationRequest));
 
 router.patch(
   '/sites/:id',

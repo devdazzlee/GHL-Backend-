@@ -198,6 +198,17 @@ describe('item 1: per-site indexing switch', () => {
   });
 });
 
+describe('admin-only test generation', () => {
+  it('POST /admin/generate-site needs the admin key', async () => {
+    const none = await call('POST', '/admin/generate-site', { body: {} });
+    assert.equal(none.status, 401);
+    const renderer = await call('POST', '/admin/generate-site', { headers: { 'x-site-api-key': RENDERER }, body: {} });
+    assert.equal(renderer.status, 403);
+    const admin = await call('POST', '/admin/generate-site', { headers: { Authorization: `Bearer ${ADMIN}` }, body: {} });
+    assert.equal(admin.status, 400); // key accepted; empty body fails validation before any AI call
+  });
+});
+
 // Rate limit last: it keeps state for this IP across the file.
 describe('contact form rate limit', () => {
   it('returns 429 after 5 messages from one IP in 10 minutes', async () => {

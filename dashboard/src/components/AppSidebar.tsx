@@ -11,6 +11,7 @@ import {
   PlayCircle,
   Settings2,
   Share2,
+  Send,
   SlidersHorizontal,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
@@ -33,6 +34,7 @@ const phase4NavItems = [
   { to: '/sites', label: 'Generated Sites', icon: Globe },
   { to: '/industry-schemas', label: 'Industry Schemas', icon: Database },
   { to: '/contacts', label: 'Contact Submissions', icon: Mail },
+  { to: '/form-test', label: 'Generate Site (Admin)', icon: Send },
 ];
 
 function navClass(isActive: boolean) {

@@ -568,6 +568,16 @@ export async function createPhase4Site(
   return data.data.site;
 }
 
+/** Dashboard test generation: admin key required (spends AI credits). */
+export async function createPhase4SiteAsAdmin(
+  payload: Phase4SitePayload,
+): Promise<Phase4GeneratedSite> {
+  const { data } = await api.post<
+    ApiResponse<{ slug: string; site: Phase4GeneratedSite }>
+  >('/phase4/admin/generate-site', payload, { timeout: 300000 });
+  return data.data.site;
+}
+
 export async function addLocationPages(
   siteId: string,
   locations: Phase4LocationInput[],

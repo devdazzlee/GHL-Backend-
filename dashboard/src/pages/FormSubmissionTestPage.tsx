@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Loader2, Send } from 'lucide-react';
-import { createPhase4Site, type Phase4SitePayload } from '../api/endpoints';
+import { createPhase4SiteAsAdmin, type Phase4SitePayload } from '../api/endpoints';
 import { ErrorBanner, PageHeader, SuccessBanner } from '../components/ui';
 import { Button } from '../components/ui/button';
 
@@ -39,7 +39,7 @@ export function FormSubmissionTestPage() {
     }
 
     try {
-      const site = await createPhase4Site(payload);
+      const site = await createPhase4SiteAsAdmin(payload);
       formEl.reset();
       setSuccess(`Site generated successfully — slug: ${site.slug}`);
     } catch (err) {
@@ -53,7 +53,7 @@ export function FormSubmissionTestPage() {
     <div>
       <PageHeader
         title="Form Submission (Test)"
-        description="Test the website intake form. Submissions POST to /phase4/webhook and trigger site generation on the backend."
+        description="Admin only. Generates a real site on production and spends AI credits. Requires the admin key."
         descriptionClassName="text-slate-400"
       />
 

@@ -7,6 +7,7 @@ import { ApprovalQueuePage } from './pages/ApprovalQueuePage';
 import { ContactSubmissionsPage } from './pages/ContactSubmissionsPage';
 import { DesignsPage } from './pages/DesignsPage';
 import { DailyJobPage } from './pages/DailyJobPage';
+import { FormSubmissionTestPage } from './pages/FormSubmissionTestPage';
 import { GeneratedSitesPage } from './pages/GeneratedSitesPage';
 import { GhlStatusPage } from './pages/GhlStatusPage';
 import { IndustrySchemasPage } from './pages/IndustrySchemasPage';
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="sites" element={<GeneratedSitesPage />} />
             <Route path="industry-schemas" element={<IndustrySchemasPage />} />
             <Route path="contacts" element={<ContactSubmissionsPage />} />
+            <Route path="form-test" element={<FormSubmissionTestPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
