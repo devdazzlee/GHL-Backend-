@@ -132,6 +132,22 @@ function IconBadge({
   );
 }
 
+/** Business name, with the logo in front of it when the site has one. */
+function FooterBrand({ site, className }: { site: FooterProps['site']; className: string }) {
+  if (!site.logoUrl) return <p className={className}>{site.businessName}</p>;
+  return (
+    <p className={clsx('inline-flex items-center gap-3', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- logos come from any host */}
+      <img
+        src={site.logoUrl}
+        alt={`${site.businessName} logo`}
+        className="h-9 w-auto max-w-[140px] shrink-0 rounded-md bg-white object-contain p-1"
+      />
+      <span>{site.businessName}</span>
+    </p>
+  );
+}
+
 export function Footer({ site, theme, footerStyle }: FooterProps) {
   const design = resolveDesignPreset(site.designVariant);
   const style = footerStyle ?? design.footerStyle;
@@ -177,7 +193,7 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
         data-footer-style={style}
       >
         <div className="mx-auto max-w-3xl px-4 py-14 text-center sm:px-6 lg:px-8">
-          <p className="text-xl font-bold">{site.businessName}</p>
+          <FooterBrand site={site} className="text-xl font-bold" />
           <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed" style={{ color: mutedText }}>
             Trusted {site.industry} professionals serving {site.city}, {site.state}.
           </p>
@@ -224,7 +240,7 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
       >
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
           <div>
-            <p className="font-bold">{site.businessName}</p>
+            <FooterBrand site={site} className="font-bold" />
             <p className="text-xs" style={{ color: mutedText }}>
               {site.city}, {site.state}
               {site.phone ? ` · ${site.phone}` : ''}
@@ -274,7 +290,7 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
         )}
       >
         <div>
-          <p className="text-xl font-bold">{site.businessName}</p>
+          <FooterBrand site={site} className="text-xl font-bold" />
           <p className="mt-3 max-w-sm text-sm leading-relaxed" style={{ color: mutedText }}>
             Trusted {site.industry} professionals serving {site.city}, {site.state} and surrounding
             communities.

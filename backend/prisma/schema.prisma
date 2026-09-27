@@ -280,6 +280,12 @@ model GeneratedSite {
   blogAutoDays    String?
   blogAutoHour    Int?
   blogTimezone    String?
+  /// Page images, picked once and then kept until someone changes them in the dashboard.
+  /// JSON { hero, about, services: { [serviceTitle]: entry }, blog: [entry] }, entry = { url, source }
+  imagesContent   String?        @db.Text
+  /// Hand edits to page text, re-applied after regeneration and undoable.
+  /// JSON { [page]: { [path]: { value, original, anchor, editedAt } } }
+  contentEdits    String?        @db.Text
   locationPages   LocationPage[]
   keywordPages    KeywordPage[]
   blogPosts       BlogPost[]
