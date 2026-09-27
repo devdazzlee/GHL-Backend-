@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AdminKeyPrompt } from './components/AdminKeyPrompt';
 import { LocationsProvider } from './contexts/LocationsContext';
 import { Layout } from './components/Layout';
 import { AddBusinessPage } from './pages/AddBusinessPage';
@@ -20,6 +21,7 @@ import { TemplatesPage } from './pages/TemplatesPage';
 export default function App() {
   return (
     <BrowserRouter>
+      <AdminKeyPrompt />
       <LocationsProvider>
         <Routes>
           <Route element={<Layout />}>

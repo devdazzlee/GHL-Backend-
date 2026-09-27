@@ -45,6 +45,8 @@ export function ContactForm({ site, slug, heading = 'Send us a message' }: Conta
       email: String(form.get('email') ?? '').trim(),
       phone: String(form.get('phone') ?? '').trim() || undefined,
       message: String(form.get('message') ?? '').trim(),
+      // Honeypot: hidden from people, often filled by bots; the backend drops those.
+      website: String(form.get('website') ?? ''),
     };
 
     try {
@@ -115,6 +117,12 @@ export function ContactForm({ site, slug, heading = 'Send us a message' }: Conta
       ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+          <label>
+            Website
+            <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+          </label>
+        </div>
         <h2 className="text-2xl font-bold text-gray-900">{heading}</h2>
         {[
           { name: 'name', label: 'Name', type: 'text' },

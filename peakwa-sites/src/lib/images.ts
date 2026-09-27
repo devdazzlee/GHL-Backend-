@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { API_URL } from '@/src/config/config';
+import { rendererHeaders } from '@/src/lib/rendererAuth';
 
 /** Mobile LCP source width passed to Pexels before Next.js optimization. */
 export const HERO_MOBILE_WIDTH = 750;
@@ -33,6 +34,7 @@ export const fetchHeroImageUrl = cache(async (slug: string): Promise<string | nu
   try {
     const res = await fetch(`${API_URL}/phase4/sites/${encodeURIComponent(slug)}/images`, {
       next: { revalidate: 86400 },
+      headers: rendererHeaders(),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -80,6 +82,7 @@ export async function getSiteImages(slug: string): Promise<SiteImages> {
   try {
     const res = await fetch(`${API_URL}/phase4/sites/${encodeURIComponent(slug)}/images`, {
       next: { revalidate: 86400 },
+      headers: rendererHeaders(),
     });
     if (!res.ok) return emptyImages;
     const data = await res.json();

@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { PRODUCTION_REVALIDATE_SECRET, PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
+import { PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
 
 dotenv.config();
 
@@ -45,7 +45,8 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',
   PEXELS_API_KEY: process.env.PEXELS_API_KEY ?? '',
   SITE_FRONTEND_URL: process.env.SITE_FRONTEND_URL?.trim() || PRODUCTION_SITE_FRONTEND_URL,
-  REVALIDATE_SECRET: process.env.REVALIDATE_SECRET?.trim() || PRODUCTION_REVALIDATE_SECRET,
+  /** Shared with peakwa-sites; no default — cache refresh is skipped when unset. */
+  REVALIDATE_SECRET: process.env.REVALIDATE_SECRET?.trim() ?? '',
   corsOrigins: parseCorsOrigins(),
 };
 

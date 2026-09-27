@@ -1067,9 +1067,33 @@ router.get(
   }),
 );
 
+/** Public contact form: per-IP limit to stop floods and abuse. */
+const contactRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many messages. Please try again later.' },
+  },
+});
+
+const CONTACT_LIMITS = { name: 120, email: 200, phone: 40, message: 5000 };
+
 router.post(
   '/sites/:slug/contact',
+  contactRateLimiter,
   asyncHandler(async (req, res) => {
+    // Honeypot: a hidden "website" field real visitors never fill. Bots that
+    // fill it get a normal-looking success; nothing is stored or sent.
+    if (String(req.body?.website ?? '').trim()) {
+      console.warn(JSON.stringify({ event: 'contact_honeypot_triggered', siteSlug: req.params.slug }));
+      return res
+        .status(201)
+        .json({ success: true, message: 'Message sent successfully', requestId: req.requestId });
+    }
+
     const site = await prisma.generatedSite.findUnique({
       where: { slug: req.params.slug },
     });
@@ -1092,6 +1116,17 @@ router.post(
     }
     if (!message) {
       throw new AppError('Field `message` is required.', 400, { code: 'INVALID_BODY' });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      throw new AppError('Field `email` must be a valid email address.', 400, { code: 'INVALID_BODY' });
+    }
+    const lengths = { name, email, phone: phone ?? '', message };
+    for (const [field, max] of Object.entries(CONTACT_LIMITS)) {
+      if (lengths[field].length > max) {
+        throw new AppError(`Field \`${field}\` must be at most ${max} characters.`, 400, {
+          code: 'INVALID_BODY',
+        });
+      }
     }
 
     const submission = await prisma.contactSubmission.create({

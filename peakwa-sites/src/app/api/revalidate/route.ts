@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
   }
 
   const secret = body.secret?.trim() || request.nextUrl.searchParams.get('secret')?.trim();
+  if (!REVALIDATE_SECRET) {
+    return NextResponse.json({ success: false, error: 'Revalidation not configured.' }, { status: 503 });
+  }
   if (secret !== REVALIDATE_SECRET) {
     return NextResponse.json({ success: false, error: 'Invalid secret.' }, { status: 401 });
   }
