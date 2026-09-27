@@ -176,6 +176,12 @@ function normalizeHexColor(value) {
   return null;
 }
 
+/** Purges the renderer cache for a site known only by id (never throws). */
+async function revalidateSiteById(siteId) {
+  const site = await prisma.generatedSite.findUnique({ where: { id: siteId }, select: { slug: true } });
+  if (site?.slug) await revalidateSiteFrontendCache(site.slug);
+}
+
 async function getGeneratedSiteById(id) {
   const site = await prisma.generatedSite.findUnique({
     where: { id },
@@ -719,6 +725,13 @@ router.get(
 
     const { serviceSlug } = req.params;
 
+    // The site's current service list decides: a removed service is 404 even
+    // if its generated page is still stored.
+    const service = findServiceBySlug(site, serviceSlug);
+    if (!service) {
+      throw new AppError('Service not found for this site.', 404, { code: 'SERVICE_NOT_FOUND' });
+    }
+
     const existingPage = await prisma.servicePage.findUnique({
       where: { siteId_serviceSlug: { siteId: site.id, serviceSlug } },
     });
@@ -729,11 +742,6 @@ router.get(
         data: { content: parseJsonSafe(existingPage.content) },
         requestId: req.requestId,
       });
-    }
-
-    const service = findServiceBySlug(site, serviceSlug);
-    if (!service) {
-      throw new AppError('Service not found for this site.', 404, { code: 'SERVICE_NOT_FOUND' });
     }
 
     let servicePage;
@@ -1221,6 +1229,9 @@ router.patch(
     });
 
     await revalidateSiteFrontendCache(site.slug);
+    if (site.slug !== existing.slug) {
+      await revalidateSiteFrontendCache(existing.slug);
+    }
 
     return res.json({
       success: true,
@@ -1258,6 +1269,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const locations = req.body?.locations;
     const pages = await generateLocationPages(req.params.siteId, locations);
+    await revalidateSiteById(req.params.siteId);
     return res.status(201).json({
       success: true,
       data: { pages },
@@ -1278,6 +1290,7 @@ router.post(
       radiusMiles,
       maxLocations,
     });
+    await revalidateSiteById(req.params.siteId);
 
     return res.status(201).json({
       success: true,
@@ -1346,6 +1359,7 @@ router.post(
       },
       include: { template: true },
     });
+    await revalidateSiteFrontendCache(site.slug);
 
     return res.status(201).json({
       success: true,
@@ -1377,7 +1391,7 @@ router.delete(
       });
     }
 
-    services.splice(serviceIndex, 1);
+    const [removed] = services.splice(serviceIndex, 1);
     if (serviceIndex < homeServices.length) {
       homeServices.splice(serviceIndex, 1);
     }
@@ -1390,6 +1404,15 @@ router.delete(
       },
       include: { template: true },
     });
+
+    // Drop the removed service's generated page (unless another listed service
+    // has the same slug), then purge the renderer cache so it 404s now.
+    const removedSlug = slugifySite(typeof removed?.title === 'string' ? removed.title : '');
+    const stillListed = services.some((s) => slugifySite(String(s?.title ?? '')) === removedSlug);
+    if (removedSlug && !stillListed) {
+      await prisma.servicePage.deleteMany({ where: { siteId: existing.id, serviceSlug: removedSlug } });
+    }
+    await revalidateSiteFrontendCache(site.slug);
 
     return res.json({
       success: true,
@@ -1411,6 +1434,7 @@ router.delete(
 
     await prisma.locationPage.deleteMany({ where: { siteId: id } });
     await prisma.generatedSite.delete({ where: { id } });
+    await revalidateSiteFrontendCache(existing.slug);
 
     return res.json({
       success: true,
