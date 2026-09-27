@@ -263,6 +263,9 @@ model GeneratedSite {
   instagramUrl    String?
   websiteUrl      String?
   logoUrl         String?
+  /// Search engines may index this site only when true. Null/false = noindex
+  /// (the default for every generated site, including demo businesses).
+  searchIndexable Boolean?
   locationPages   LocationPage[]
   contactSubmissions ContactSubmission[]
   servicePages    ServicePage[]

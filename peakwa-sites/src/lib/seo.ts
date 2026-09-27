@@ -1,15 +1,21 @@
 import type { Metadata } from 'next';
 import { IS_SEARCH_INDEXABLE, SITE_BASE_URL } from '@/src/config';
+import { isSiteIndexable, robotsDirective } from '@/src/lib/indexing';
 import type { GeneratedSite } from '@/src/lib/types';
 
 /** HTTP X-Robots-Tag value — must stay in sync with getSiteRobots(). */
-export function robotsHeaderValue(indexable: boolean = IS_SEARCH_INDEXABLE): string {
-  return indexable ? 'index, follow' : 'noindex, nofollow';
+export function robotsHeaderValue(indexable: boolean): string {
+  return robotsDirective(indexable);
 }
 
-/** Shared robots directive — indexable in production and in local `next dev`. */
-export function getSiteRobots(): NonNullable<Metadata['robots']> {
-  if (!IS_SEARCH_INDEXABLE) {
+/** True when this site may be indexed (platform switch AND per-site switch). */
+export function siteIsIndexable(site: GeneratedSite | null | undefined): boolean {
+  return isSiteIndexable(site, IS_SEARCH_INDEXABLE);
+}
+
+/** Robots metadata for a site's pages — noindex unless the site is switched on. */
+export function getSiteRobots(site: GeneratedSite | null | undefined): NonNullable<Metadata['robots']> {
+  if (!siteIsIndexable(site)) {
     return { index: false, follow: false };
   }
 
@@ -74,7 +80,7 @@ export function buildPageMetadata({
     title,
     description,
     alternates: { canonical },
-    robots: getSiteRobots(),
+    robots: getSiteRobots(site),
     keywords,
     authors: [{ name: site.businessName }],
     creator: site.businessName,

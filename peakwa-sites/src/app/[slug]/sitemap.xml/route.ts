@@ -1,4 +1,5 @@
 import { getSiteBySlug } from '@/src/lib/api';
+import { siteIsIndexable } from '@/src/lib/seo';
 import { buildSiteSitemapEntries, entriesToXml } from '@/src/lib/sitemap';
 
 type RouteParams = { params: Promise<{ slug: string }> };
@@ -15,7 +16,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return new Response('Not found', { status: 404 });
     }
 
-    const entries = await buildSiteSitemapEntries(site);
+    // A noindex site publishes an empty sitemap, never its URLs.
+    const entries = siteIsIndexable(site) ? await buildSiteSitemapEntries(site) : [];
     return new Response(entriesToXml(entries), {
       status: 200,
       headers: {

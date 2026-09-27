@@ -518,6 +518,7 @@ export function GeneratedSitesPage() {
       projectsCompleted: siteData.projectsCompleted || '',
       logoUrl: siteData.logoUrl || '',
       status: siteData.status || 'ACTIVE',
+      searchIndexable: siteData.searchIndexable === true ? 'true' : 'false',
     });
   }
 
@@ -715,6 +716,7 @@ export function GeneratedSitesPage() {
     try {
       const updated = await updatePhase4Site(editTarget.id, {
         status: (editData.status || 'ACTIVE') as SiteStatus,
+        searchIndexable: editData.searchIndexable === 'true',
       });
       await refreshAfterEdit(updated, 'Status updated.');
     } catch (err) {
@@ -1826,6 +1828,28 @@ export function GeneratedSitesPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-800 p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={editData.searchIndexable === 'true'}
+                      onChange={(e) =>
+                        setEditData((prev) => ({
+                          ...prev,
+                          searchIndexable: e.target.checked ? 'true' : 'false',
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block font-medium text-white">
+                        Allow search engines to index this site
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        Off by default: every page is noindex and left out of sitemaps. Turn on
+                        only for a real business whose site is moving to its own domain.
+                      </span>
+                    </span>
+                  </label>
                   <div className="flex justify-end">
                     <Button type="submit" disabled={savingStatus}>
                       {savingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

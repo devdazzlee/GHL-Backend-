@@ -7,7 +7,7 @@ import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
 import { resolveTheme } from '@/src/lib/theme';
-import { getMetadataBase } from '@/src/lib/seo';
+import { getMetadataBase, getSiteRobots } from '@/src/lib/seo';
 import { designCssVars, resolveDesignPreset } from '@/src/designs/presets';
 import clsx from 'clsx';
 
@@ -23,10 +23,12 @@ async function fetchSiteBySlug(slug: string): Promise<GeneratedSite | null> {
 export async function generateMetadata({ params }: LayoutProps): Promise<Metadata> {
   const { slug } = await params;
   const site = await fetchSiteBySlug(slug);
-  if (!site) return { title: 'Site Not Found' };
+  if (!site) return { title: 'Site Not Found', robots: { index: false, follow: false } };
 
+  // Default for every page of the site; pages using buildPageMetadata repeat it.
   return {
     metadataBase: getMetadataBase(),
+    robots: getSiteRobots(site),
   };
 }
 

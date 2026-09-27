@@ -392,6 +392,8 @@ export interface Phase4GeneratedSite {
   contactContent: string | null;
   blogContent: string | null;
   status: SiteStatus;
+  /** Search engines may index the site only when true (default: noindex). */
+  searchIndexable?: boolean | null;
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -448,6 +450,7 @@ export interface Phase4SiteUpdatePayload {
   customersServed?: string | null;
   projectsCompleted?: string | null;
   status?: SiteStatus;
+  searchIndexable?: boolean;
 }
 
 export async function fetchPhase4TemplatesPaginated(

@@ -516,6 +516,15 @@ function buildSiteUpdateData(body) {
         : null;
   }
 
+  if (body.searchIndexable !== undefined) {
+    if (typeof body.searchIndexable !== 'boolean') {
+      throw new AppError('Field `searchIndexable` must be true or false.', 400, {
+        code: 'INVALID_BODY',
+      });
+    }
+    updates.searchIndexable = body.searchIndexable;
+  }
+
   if (body.status !== undefined) {
     const status = String(body.status ?? '').trim().toUpperCase();
     if (!SITE_STATUSES.has(status)) {
@@ -1002,6 +1011,25 @@ router.delete(
     return res.json({
       success: true,
       data: { template },
+      requestId: req.requestId,
+    });
+  }),
+);
+
+/**
+ * Slugs of ACTIVE sites that may be indexed by search engines. The renderer's
+ * middleware uses this to set X-Robots-Tag; every other site is noindex.
+ */
+router.get(
+  '/indexable-sites',
+  asyncHandler(async (req, res) => {
+    const sites = await prisma.generatedSite.findMany({
+      where: { status: 'ACTIVE', searchIndexable: true },
+      select: { slug: true },
+    });
+    return res.json({
+      success: true,
+      data: { slugs: sites.map((s) => s.slug) },
       requestId: req.requestId,
     });
   }),
