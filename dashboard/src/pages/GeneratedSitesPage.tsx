@@ -50,6 +50,8 @@ import {
 import { CardListSkeleton } from '../components/ui/skeleton';
 import { SITE_BASE_URL } from '../config/config';
 import { BlogPanel } from '../components/BlogPanel';
+import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
+import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../utils/format';
@@ -508,6 +510,7 @@ export function GeneratedSitesPage() {
   const [editTarget, setEditTarget] = useState<SiteWithTheme | null>(null);
   const [editTab, setEditTab] = useState<EditTab>('business');
   const [editData, setEditData] = useState<Record<string, string>>({});
+  const [logoUploading, setLogoUploading] = useState(false);
   const { locations: ghlLocations } = useLocations();
   const [savingBusiness, setSavingBusiness] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
@@ -1220,6 +1223,11 @@ export function GeneratedSitesPage() {
                       ))}
                     </div>
                   )}
+                  <div className="border-t border-slate-800 pt-6">
+                    <p className="mb-1 font-medium text-white">Edit texts and images</p>
+                    <p className="mb-4 text-xs text-slate-500">Changes show on the live site within a minute and are kept if the site content is regenerated.</p>
+                    <ServicesEditor key={selectedSite.id} siteId={selectedSite.id} industry={selectedSite.industry} />
+                  </div>
                 </div>
               ) : activeTab === 'locations' ? (
                 <div className="space-y-4">
@@ -1325,6 +1333,17 @@ export function GeneratedSitesPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              ) : activeTab === 'home' || activeTab === 'about' || activeTab === 'contact' ? (
+                <div key={`${selectedSite.id}-${activeTab}`} className="space-y-6">
+                  {activeTab !== 'contact' ? (
+                    <SiteImageSlots
+                      siteId={selectedSite.id}
+                      slotIds={[activeTab === 'home' ? 'hero' : 'about']}
+                      searchHint={selectedSite.industry}
+                    />
+                  ) : null}
+                  <PageTextEditor siteId={selectedSite.id} page={activeTab} />
                 </div>
               ) : (
                 <PageContentPanel
@@ -1697,6 +1716,32 @@ export function GeneratedSitesPage() {
                       className={inputClass}
                       placeholder="https://example.com/logo.png"
                     />
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-slate-300 underline">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={logoUploading || !editTarget}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file || !editTarget) return;
+                          setLogoUploading(true);
+                          setError(null);
+                          try {
+                            const url = await uploadSiteImage(editTarget.id, file, 'logo');
+                            setEditData((prev) => ({ ...prev, logoUrl: url }));
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Logo upload failed');
+                          } finally {
+                            setLogoUploading(false);
+                          }
+                        }}
+                      />
+                      {logoUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      Upload a logo file (then save)
+                    </label>
+                    <p className="mt-1 text-[11px] text-slate-500">Shown in the site menu, footer and search-engine business details.</p>
                     {editData.logoUrl ? (
                       <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                         <img

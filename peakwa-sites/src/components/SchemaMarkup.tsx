@@ -121,7 +121,8 @@ function buildLocalBusinessNode(
     email: site.email || undefined,
     url: `${SITE_BASE_URL}/${site.slug}`,
   };
-  if (imageUrl) node.image = imageUrl;
+  if (site.logoUrl) node.logo = site.logoUrl;
+  if (imageUrl || site.logoUrl) node.image = imageUrl || site.logoUrl;
   return node;
 }
 

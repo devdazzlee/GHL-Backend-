@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { API_URL } from '@/src/config/config';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
+import { siteCacheTag } from '@/src/lib/siteCache';
 
 /** Mobile LCP source width passed to Pexels before Next.js optimization. */
 export const HERO_MOBILE_WIDTH = 750;
@@ -33,7 +34,7 @@ export function heroDesktopSrc(src: string): string {
 export const fetchHeroImageUrl = cache(async (slug: string): Promise<string | null> => {
   try {
     const res = await fetch(`${API_URL}/phase4/sites/${encodeURIComponent(slug)}/images`, {
-      next: { revalidate: 86400 },
+      next: { revalidate: 86400, tags: [siteCacheTag(slug)] },
       headers: rendererHeaders(),
     });
     if (!res.ok) return null;
@@ -81,7 +82,7 @@ const emptyImages: SiteImages = {
 export async function getSiteImages(slug: string): Promise<SiteImages> {
   try {
     const res = await fetch(`${API_URL}/phase4/sites/${encodeURIComponent(slug)}/images`, {
-      next: { revalidate: 86400 },
+      next: { revalidate: 86400, tags: [siteCacheTag(slug)] },
       headers: rendererHeaders(),
     });
     if (!res.ok) return emptyImages;
