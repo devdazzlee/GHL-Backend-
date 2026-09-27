@@ -674,11 +674,30 @@ export function GeneratedSitesPage() {
     e.preventDefault();
     if (!editTarget || savingBusiness) return;
 
+    const identityChanged =
+      (editData.businessName?.trim() ?? '') !== (editTarget.businessName ?? '') ||
+      (editData.industry?.trim() ?? '') !== (editTarget.industry ?? '') ||
+      (editData.city?.trim() ?? '') !== (editTarget.city ?? '');
+    // Rewriting the site is never a side effect: ask. The URL stays the same either way.
+    const regenerateContent =
+      identityChanged &&
+      window.confirm(
+        [
+          'Business name, industry or city changed.',
+          '',
+          'OK = also rewrite ALL page text with AI (replaces current text and colours; paid AI call).',
+          'Cancel = save the new details only (page text keeps the old wording).',
+          '',
+          'The site URL stays the same either way.',
+        ].join('\n'),
+      );
+
     setSavingBusiness(true);
     setError(null);
     setEditSuccess(null);
     try {
       const updated = await updatePhase4Site(editTarget.id, {
+        regenerateContent,
         businessName: editData.businessName?.trim() ?? '',
         industry: editData.industry?.trim() ?? '',
         phone: editData.phone?.trim() || null,
@@ -754,6 +773,13 @@ export function GeneratedSitesPage() {
 
   async function handleRegenerateSite() {
     if (!editTarget || regenerating) return;
+    if (
+      !window.confirm(
+        'Rewrite ALL page text, the blog and the colours for this site with AI? This replaces the current content and uses paid AI calls. The URL stays the same.',
+      )
+    ) {
+      return;
+    }
 
     setRegenerating(true);
     setError(null);

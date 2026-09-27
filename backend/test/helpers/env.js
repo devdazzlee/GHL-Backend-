@@ -19,3 +19,6 @@ process.env.SITE_FRONTEND_URL = 'http://127.0.0.1:9';
 process.env.ADMIN_API_KEYS = '';
 process.env.SITE_RENDERER_API_KEY = '';
 process.env.WEBHOOK_API_KEY = '';
+// No paid AI or image calls from tests.
+process.env.OPENAI_API_KEY = '';
+process.env.PEXELS_API_KEY = '';

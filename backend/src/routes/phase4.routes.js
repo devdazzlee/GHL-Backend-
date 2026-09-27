@@ -199,20 +199,6 @@ async function getGeneratedSiteById(id) {
   return site;
 }
 
-async function ensureUniqueSiteSlugForUpdate(baseSlug, excludeId) {
-  let candidate = baseSlug;
-  let suffix = 2;
-
-  while (true) {
-    const existing = await prisma.generatedSite.findUnique({ where: { slug: candidate } });
-    if (!existing || existing.id === excludeId) {
-      return candidate;
-    }
-    candidate = `${baseSlug}-${suffix}`;
-    suffix += 1;
-  }
-}
-
 async function regenerateSiteContent(site) {
   const businessData = {
     businessName: site.businessName,
@@ -1216,14 +1202,22 @@ router.patch(
     const merged = { ...existing, ...updates };
     let data = { ...updates };
 
-    if (shouldRegenerateContent(existing, updates)) {
+    // Changing the URL needs a 301 from the old one; that needs the
+    // SiteRedirect table (pending approval), so it is refused for now.
+    if (req.body?.changeSlug === true) {
+      throw new AppError(
+        'Changing a site URL is disabled until old URLs can be redirected (301).',
+        409,
+        { code: 'SLUG_CHANGE_NEEDS_REDIRECTS' },
+      );
+    }
+
+    // Regeneration is explicit: editing name/industry/city only saves the
+    // fields unless the caller also sends regenerateContent: true. The URL
+    // (slug) never changes as a side effect.
+    if (req.body?.regenerateContent === true && shouldRegenerateContent(existing, updates)) {
       const regenerated = await regenerateSiteContent(merged);
       data = { ...data, ...regenerated };
-
-      const baseSlug = slugifySite(merged.businessName, merged.city);
-      if (baseSlug !== existing.slug) {
-        data.slug = await ensureUniqueSiteSlugForUpdate(baseSlug, id);
-      }
     }
 
     const site = await prisma.generatedSite.update({

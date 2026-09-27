@@ -454,6 +454,8 @@ export interface Phase4SiteUpdatePayload {
   status?: SiteStatus;
   searchIndexable?: boolean;
   leadLocationId?: string | null;
+  /** Also rewrite page text with AI when name/industry/city change. */
+  regenerateContent?: boolean;
 }
 
 export async function fetchPhase4TemplatesPaginated(
