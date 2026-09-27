@@ -21,6 +21,8 @@ export type GeneratedSite = {
   servicesContent: string | null;
   contactContent: string | null;
   blogContent: string | null;
+  /** false = the whole blog is hidden (pages, links, sitemap). Null/true = shown. */
+  blogEnabled?: boolean | null;
   status: string;
   primaryColor: string;
   secondaryColor: string;
@@ -78,4 +80,42 @@ export type KeywordPageDetail = {
   publishedAt: string | null;
   content: KeywordPageContent;
   locationPage: { slug: string; city: string; county: string; state: string };
+};
+
+export type BlogPostSummary = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  imageUrl: string | null;
+  category: string | null;
+  readTime: string;
+  publishedAt: string | null;
+  updatedAt: string | null;
+  /** Position in the site's original posts: old /blog/{n} URLs redirect to this post. */
+  legacyIndex: number | null;
+};
+
+/** managed=false: the site's blog has never been managed; use the posts in blogContent. */
+export type PublishedBlog = {
+  enabled: boolean;
+  managed: boolean;
+  posts: BlogPostSummary[];
+};
+
+export type PublishedBlogPost = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  /** Markdown subset, see lib/blogMarkdown.ts */
+  body: string;
+  faqs: Array<{ question?: string; answer?: string }>;
+  links: Array<{ label?: string; path?: string }>;
+  imageUrl: string | null;
+  category: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  readTime: string;
+  publishedAt: string | null;
+  updatedAt: string | null;
+  related: Array<{ slug: string; title: string }>;
 };

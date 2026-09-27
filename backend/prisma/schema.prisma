@@ -271,8 +271,18 @@ model GeneratedSite {
   /// Null = not mapped: leads are kept in our database and flagged, never sent elsewhere.
   leadLocationId  String?
   leadLocation    Location?      @relation("SiteLeadLocation", fields: [leadLocationId], references: [id], onDelete: SetNull)
+  /// Whole blog on/off. Null = on (every site has shown its blog since creation); false hides
+  /// the blog pages, nav/footer links and sitemap entries, and stops automatic posts.
+  blogEnabled     Boolean?
+  /// Automatic posts (off unless true): weekdays (0=Sun..6=Sat, comma separated, 2-3 days),
+  /// local hour 0-23, IANA time zone.
+  blogAutoEnabled Boolean?
+  blogAutoDays    String?
+  blogAutoHour    Int?
+  blogTimezone    String?
   locationPages   LocationPage[]
   keywordPages    KeywordPage[]
+  blogPosts       BlogPost[]
   contactSubmissions ContactSubmission[]
   servicePages    ServicePage[]
   createdAt       DateTime       @default(now())
@@ -351,4 +361,48 @@ model ContactSubmission {
 
   @@index([siteId])
   @@index([createdAt])
+}
+
+/// Blog posts managed per site. A site's original generated posts (GeneratedSite.blogContent)
+/// are copied in the first time its blog is managed; from then on this table is the source.
+model BlogPost {
+  id             String        @id @default(cuid())
+  siteId         String
+  site           GeneratedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  /// URL segment under /{siteSlug}/blog/{slug}
+  slug           String
+  title          String
+  /// Topic the post was written about (its first title). Never changed by edits, so topic
+  /// de-duplication still sees it after someone retitles the post.
+  topic          String?
+  excerpt        String?       @db.Text
+  /// Markdown-style body: ## / ### headings, paragraphs, "- " lists, [text](url) links, ![alt](url) images
+  body           String        @db.Text
+  /// JSON [{ question, answer }]
+  faqs           String?       @db.Text
+  /// JSON [{ label, path }]: "Explore more" links to the site's own pages
+  links          String?       @db.Text
+  imageUrl       String?
+  category       String?
+  seoTitle       String?
+  seoDescription String?
+  /// DRAFT | PUBLISHED
+  status         String        @default("DRAFT")
+  /// IMPORTED | MANUAL | AUTO
+  source         String
+  /// Position in the old blogContent posts (old /blog/{n} URLs redirect here)
+  legacyIndex    Int?
+  /// Local date (YYYY-MM-DD) of the scheduled run that wrote it; one automatic post per slot
+  autoSlot       String?
+  /// Last edit made in the dashboard
+  editedAt       DateTime?
+  publishedAt    DateTime?
+  /// Soft delete: hidden everywhere, kept so its topic is never written again
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([siteId, slug])
+  @@unique([siteId, autoSlot])
+  @@index([siteId, status])
 }

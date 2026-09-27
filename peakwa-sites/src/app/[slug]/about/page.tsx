@@ -352,7 +352,7 @@ export default async function AboutPage({ params }: PageProps) {
           { label: 'All services', href: 'services' },
           ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
           { label: 'Get in touch', href: 'contact' },
-          { label: 'Read the blog', href: 'blog' },
+          ...(site.blogEnabled !== false ? [{ label: 'Read the blog', href: 'blog' }] : []),
         ]}
       />
     </>

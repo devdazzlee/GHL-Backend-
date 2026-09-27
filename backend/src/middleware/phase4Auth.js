@@ -25,6 +25,8 @@ const RENDERER_GET_ROUTES = [
   /^\/sites\/[^/]+\/services\/[^/]+\/?$/,
   /^\/sites\/[^/]+\/published-keyword-pages\/?$/,
   /^\/sites\/[^/]+\/published-keyword-pages\/[^/]+\/?$/,
+  /^\/sites\/[^/]+\/published-blog\/?$/,
+  /^\/sites\/[^/]+\/published-blog\/[^/]+\/?$/,
 ];
 
 const PUBLIC_ROUTES = [{ method: 'POST', path: /^\/sites\/[^/]+\/contact\/?$/ }];

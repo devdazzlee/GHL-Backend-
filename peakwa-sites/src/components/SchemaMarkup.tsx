@@ -49,8 +49,9 @@ function websiteSchemaId(slug: string): string {
   return `${SITE_BASE_URL}/${slug}#website`;
 }
 
-function articleSchemaId(slug: string, postIndex: number): string {
-  return `${SITE_BASE_URL}/${slug}/blog/${postIndex}#article`;
+/** postPath: the post's slug, or its index for posts still stored with the site. */
+function articleSchemaId(slug: string, postPath: string | number): string {
+  return `${SITE_BASE_URL}/${slug}/blog/${postPath}#article`;
 }
 
 function serviceSchemaId(slug: string, serviceSlug: string): string {
@@ -470,19 +471,19 @@ export function ArticleSchema({
   excerpt,
   businessName,
   slug,
-  postIndex,
+  postPath,
 }: {
   title: string;
   excerpt: string;
   businessName: string;
   slug: string;
-  postIndex: number;
+  postPath: string | number;
 }) {
   return (
     <JsonLd
       schema={{
         '@context': 'https://schema.org',
-        ...buildArticleNode(title, excerpt, businessName, slug, postIndex),
+        ...buildArticleNode(title, excerpt, businessName, slug, postPath),
       }}
     />
   );
@@ -493,13 +494,14 @@ function buildArticleNode(
   excerpt: string,
   businessName: string,
   slug: string,
-  postIndex: number,
+  postPath: string | number,
   imageUrl?: string | null,
+  dates?: { published?: string | null; modified?: string | null },
 ): Record<string, unknown> {
-  const url = `${SITE_BASE_URL}/${slug}/blog/${postIndex}`;
+  const url = `${SITE_BASE_URL}/${slug}/blog/${postPath}`;
   const node: Record<string, unknown> = {
     '@type': 'Article',
-    '@id': articleSchemaId(slug, postIndex),
+    '@id': articleSchemaId(slug, postPath),
     headline: title,
     description: excerpt,
     author: { '@type': 'Organization', name: businessName },
@@ -511,6 +513,8 @@ function buildArticleNode(
     url,
   };
   if (imageUrl) node.image = imageUrl;
+  if (dates?.published) node.datePublished = dates.published;
+  if (dates?.modified ?? dates?.published) node.dateModified = dates?.modified ?? dates?.published;
   return node;
 }
 
@@ -520,24 +524,28 @@ export function BlogPostJsonLd({
   excerpt,
   businessName,
   slug,
-  postIndex,
+  postPath,
   site,
   faqs,
   breadcrumbItems,
   imageUrl,
+  datePublished,
+  dateModified,
 }: {
   title: string;
   excerpt: string;
   businessName: string;
   slug: string;
-  postIndex: number;
+  postPath: string | number;
   site: GeneratedSite;
   faqs?: { question: string; answer: string }[];
   breadcrumbItems: Array<{ label: string; href?: string }>;
   imageUrl?: string | null;
+  datePublished?: string | null;
+  dateModified?: string | null;
 }) {
   const nodes: Record<string, unknown>[] = [
-    buildArticleNode(title, excerpt, businessName, slug, postIndex, imageUrl),
+    buildArticleNode(title, excerpt, businessName, slug, postPath, imageUrl, { published: datePublished, modified: dateModified }),
     buildBreadcrumbNode(site, breadcrumbItems),
   ];
   const faq = buildFaqNode(faqs ?? []);

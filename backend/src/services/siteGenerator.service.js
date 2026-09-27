@@ -420,7 +420,7 @@ function normalizePageStructure(pageType, content) {
 /**
  * Blog body + FAQs as separate contract units (fail closed).
  */
-async function generateBlogPost(businessData, postOutline, systemPrompt, postIndex) {
+export async function generateBlogPost(businessData, postOutline, systemPrompt, postIndex) {
   const { businessName, industry, city, state } = businessData;
   const title = postOutline?.title || `Blog post ${postIndex + 1}`;
   const category = postOutline?.category || 'Tips';

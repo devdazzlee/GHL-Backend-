@@ -2,7 +2,14 @@ import { cache } from 'react';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config/config';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { ALL_SITES_CACHE_TAG, siteCacheTag } from '@/src/lib/siteCache';
-import type { GeneratedSite, KeywordPageDetail, KeywordPageSummary, LocationPage } from './types';
+import type {
+  GeneratedSite,
+  KeywordPageDetail,
+  KeywordPageSummary,
+  LocationPage,
+  PublishedBlog,
+  PublishedBlogPost,
+} from './types';
 
 type FetchCacheOptions = {
   revalidate: number;
@@ -104,6 +111,31 @@ export async function getLocationPages(slug: string): Promise<LocationPage[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * Blog state and published posts. If the backend cannot answer (or is older than
+ * this renderer), fall back to the posts stored with the site so the blog never disappears.
+ */
+export async function getPublishedBlog(slug: string): Promise<PublishedBlog> {
+  const fallback: PublishedBlog = { enabled: true, managed: false, posts: [] };
+  const res = await fetchApi(
+    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-blog`,
+    fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-blog`] }),
+  );
+  if (!res || !res.ok) return fallback;
+  const data = await res.json().catch(() => null);
+  return data?.data && typeof data.data.enabled === 'boolean' ? (data.data as PublishedBlog) : fallback;
+}
+
+export async function getPublishedBlogPost(slug: string, postSlug: string): Promise<PublishedBlogPost | null> {
+  const res = await fetchApi(
+    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-blog/${encodeURIComponent(postSlug)}`,
+    fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-blog`] }),
+  );
+  if (!res || !res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return data?.data?.post ?? null;
 }
 
 export async function getServicePageContent(slug: string, serviceSlug: string) {

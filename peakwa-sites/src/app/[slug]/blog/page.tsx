@@ -9,7 +9,8 @@ import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
-import { parseJson, type BlogContent, type BlogPost, type ServicesContent } from '@/src/lib/content';
+import { getBlogListing, type BlogListItem } from '@/src/lib/blog';
+import { parseJson, type BlogContent, type ServicesContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
@@ -101,14 +102,12 @@ function BlogImage({
 
 function FeaturedPost({
   post,
-  postIndex,
   slug,
   image,
   accentColor,
   primaryColor,
 }: {
-  post: BlogPost;
-  postIndex: number;
+  post: BlogListItem;
   slug: string;
   image: string | null;
   accentColor: string;
@@ -129,7 +128,7 @@ function FeaturedPost({
         />
       </div>
       <div className="p-6 md:p-8">
-        <CategoryBadge category={post.category} accentColor={accentColor} />
+        <CategoryBadge category={post.category ?? undefined} accentColor={accentColor} />
         <h2 className="mt-4 text-2xl font-bold leading-tight text-gray-900 md:text-3xl lg:text-4xl">
           {post.title}
         </h2>
@@ -141,7 +140,7 @@ function FeaturedPost({
           {post.readTime || '5 min read'}
         </div>
         <Link
-          href={`/${slug}/blog/${postIndex}`}
+          href={`/${slug}/blog/${post.key}`}
           className="mt-6 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-90"
           style={{ backgroundColor: accentColor, color: accentText }}
         >
@@ -155,14 +154,12 @@ function FeaturedPost({
 
 function SidebarPost({
   post,
-  postIndex,
   slug,
   image,
   accentColor,
   primaryColor,
 }: {
-  post: BlogPost;
-  postIndex: number;
+  post: BlogListItem;
   slug: string;
   image: string | null;
   accentColor: string;
@@ -170,7 +167,7 @@ function SidebarPost({
 }) {
   return (
     <Link
-      href={`/${slug}/blog/${postIndex}`}
+      href={`/${slug}/blog/${post.key}`}
       className={`group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ${CARD_HOVER}`}
     >
       <div className="relative h-[140px] w-full shrink-0 overflow-hidden sm:h-[160px]">
@@ -182,7 +179,7 @@ function SidebarPost({
         />
       </div>
       <div className="flex flex-1 flex-col p-5">
-        <CategoryBadge category={post.category} accentColor={accentColor} />
+        <CategoryBadge category={post.category ?? undefined} accentColor={accentColor} />
         <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-snug text-gray-900 group-hover:underline">
           {post.title}
         </h3>
@@ -196,14 +193,12 @@ function SidebarPost({
 
 function GridPostCard({
   post,
-  postIndex,
   slug,
   image,
   accentColor,
   primaryColor,
 }: {
-  post: BlogPost;
-  postIndex: number;
+  post: BlogListItem;
   slug: string;
   image: string | null;
   accentColor: string;
@@ -222,14 +217,14 @@ function GridPostCard({
         />
       </div>
       <div className="flex flex-1 flex-col p-6">
-        <CategoryBadge category={post.category} accentColor={accentColor} />
+        <CategoryBadge category={post.category ?? undefined} accentColor={accentColor} />
         <h3 className="mt-3 text-lg font-bold leading-snug text-gray-900">{post.title}</h3>
         <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
           <Clock className="h-4 w-4 shrink-0" />
           {post.readTime || '5 min read'}
         </div>
         <Link
-          href={`/${slug}/blog/${postIndex}`}
+          href={`/${slug}/blog/${post.key}`}
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold transition group-hover:gap-3"
           style={{ color: accentColor }}
         >
@@ -247,20 +242,21 @@ export default async function BlogPage({ params }: PageProps) {
   if (!site) notFound();
 
   const images = await getSiteImages(slug);
+  const listing = await getBlogListing(site, images.blog);
+  if (!listing.enabled) notFound();
   const content = parseJson<BlogContent>(site.blogContent, {});
   const servicesCatalog = parseJson<ServicesContent>(site.servicesContent, {});
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
-  const posts = content.posts ?? [];
+  const posts = listing.posts;
 
   const featuredPost = posts[0];
   const sidebarPosts = posts.slice(1, 3);
   const morePosts = posts.slice(3);
 
-  const postImage = (post: BlogPost | undefined, index: number) =>
-    post?.coverImageUrl || images.blog[index] || null;
+  const postImage = (post: BlogListItem | undefined) => post?.imageUrl ?? null;
 
-  const heroImage = postImage(featuredPost, 0) ?? images.hero ?? null;
+  const heroImage = postImage(featuredPost) ?? images.hero ?? null;
   const heroTextColor = heroImage ? '#FFFFFF' : getTextColor(theme.primaryColor);
   const compactHero = design.heroLayout === 'compact' || design.family === 'utility';
   const centeredHero =
@@ -343,9 +339,8 @@ export default async function BlogPage({ params }: PageProps) {
                   <div className="lg:col-span-2">
                     <FeaturedPost
                       post={featuredPost}
-                      postIndex={0}
                       slug={slug}
-                      image={postImage(featuredPost, 0) ?? heroImage}
+                      image={postImage(featuredPost) ?? heroImage}
                       accentColor={theme.accentColor}
                       primaryColor={theme.primaryColor}
                     />
@@ -360,9 +355,8 @@ export default async function BlogPage({ params }: PageProps) {
                         <SidebarPost
                           key={`sidebar-${post.title}-${postIndex}`}
                           post={post}
-                          postIndex={postIndex}
                           slug={slug}
-                          image={postImage(post, postIndex)}
+                          image={postImage(post)}
                           accentColor={theme.accentColor}
                           primaryColor={theme.primaryColor}
                         />
@@ -388,9 +382,8 @@ export default async function BlogPage({ params }: PageProps) {
                       <GridPostCard
                         key={`grid-${post.title}-${postIndex}`}
                         post={post}
-                        postIndex={postIndex}
                         slug={slug}
-                        image={postImage(post, postIndex)}
+                        image={postImage(post)}
                         accentColor={theme.accentColor}
                         primaryColor={theme.primaryColor}
                       />

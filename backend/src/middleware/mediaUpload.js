@@ -44,8 +44,18 @@ export function pickFormString(value) {
 /**
  * Parse multipart/form-data (file + text fields). Runs before route handler so
  * req.body is populated even when the file part is sent before text fields.
+ * GBP media uploads also need a postType field.
  */
 export function parseMediaMultipart(req, res, next) {
+  return parseMultipart(req, res, next, { requirePostType: true });
+}
+
+/** Image upload with no postType (generated-site images). Sets req.uploadedFile. */
+export function parseImageMultipart(req, res, next) {
+  return parseMultipart(req, res, next, { requirePostType: false });
+}
+
+function parseMultipart(req, res, next, { requirePostType }) {
   const contentType = req.headers['content-type'] ?? '';
   if (!contentType.includes('multipart/form-data')) {
     return next(
@@ -132,6 +142,11 @@ export function parseMediaMultipart(req, res, next) {
             code: 'FILE_REQUIRED',
           }),
         );
+      }
+
+      if (!requirePostType) {
+        req.uploadedFile = uploadedFile;
+        return next();
       }
 
       const postType = pickFormString(
