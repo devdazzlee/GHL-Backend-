@@ -14,7 +14,11 @@ import {
 import { createSmtpTransporter } from '../services/email.service.js';
 import { scheduleSiteFinalization } from '../services/sitePostProcessing.service.js';
 import { revalidateSiteFrontendCache } from '../services/siteRevalidation.service.js';
-import { generateLocationPages, generateLocationPagesByRadius } from '../services/locationPage.service.js';
+import {
+  generateLocationPages,
+  generateLocationPagesByRadius,
+  previewRadiusTowns,
+} from '../services/locationPage.service.js';
 import {
   generatePageContent,
   generateSite,
@@ -31,6 +35,7 @@ import {
   updateIndustrySchema,
 } from '../services/industrySchema.service.js';
 import { listContactSubmissions } from '../services/contactSubmission.service.js';
+import { deliverLeadToGhl } from '../services/siteLeads.service.js';
 import {
   createTemplate,
   deleteTemplate,
@@ -93,7 +98,6 @@ function validateWebhookBody(body) {
 const HERO_STYLES = new Set(['dark', 'light']);
 const FONT_STYLES = new Set(['modern', 'classic', 'friendly']);
 const SITE_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE']);
-const GHL_VERSION = '2021-07-28';
 
 async function sendContactNotificationEmail(site, submission) {
   const subject = `New contact from ${site.businessName} website`;
@@ -159,97 +163,6 @@ async function sendContactNotificationEmail(site, submission) {
   return info;
 }
 
-async function resolveGhlLocationForSite(site) {
-  const locations = await prisma.location.findMany({
-    where: {
-      status: 'ACTIVE',
-      ghlApiKey: { not: null },
-    },
-    include: {
-      business: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  const withKey = locations.filter((location) => location.ghlApiKey?.trim());
-  if (withKey.length === 0) {
-    return null;
-  }
-
-  const normalizedIndustry = String(site.industry ?? '')
-    .trim()
-    .toLowerCase();
-
-  const industryMatch = withKey.find((location) => {
-    const businessName = String(location.business?.name ?? '').toLowerCase();
-    return normalizedIndustry && businessName.includes(normalizedIndustry);
-  });
-
-  return industryMatch ?? withKey[0];
-}
-
-async function createGhlContactFromSubmission(site, submission) {
-  const location = await resolveGhlLocationForSite(site);
-  if (!location?.ghlApiKey?.trim()) {
-    console.warn(
-      JSON.stringify({
-        event: 'ghl_contact_skipped',
-        reason: 'No active location with ghlApiKey found',
-        siteSlug: site.slug,
-      }),
-    );
-    return { skipped: true };
-  }
-
-  if (env.MOCK_MODE) {
-    console.info(
-      JSON.stringify({
-        event: 'ghl_contact_mock',
-        siteSlug: site.slug,
-        ghlLocationId: location.ghlLocationId,
-        email: submission.email,
-      }),
-    );
-    return { mock: true };
-  }
-
-  try {
-    const response = await fetch('https://services.leadconnectorhq.com/contacts/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${location.ghlApiKey.trim()}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Version: GHL_VERSION,
-      },
-      body: JSON.stringify({
-        locationId: location.ghlLocationId,
-        firstName: submission.name,
-        email: submission.email,
-        phone: submission.phone ?? undefined,
-        source: 'Website Contact Form',
-        tags: ['website-lead', site.industry],
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`GHL contacts API failed: ${response.status} ${body}`);
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        event: 'ghl_contact_failed',
-        siteSlug: site.slug,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    return { success: false };
-  }
-}
-
 function slugifySite(...parts) {
   return parts
     .filter(Boolean)
@@ -267,6 +180,12 @@ function normalizeHexColor(value) {
   return null;
 }
 
+/** Purges the renderer cache for a site known only by id (never throws). */
+async function revalidateSiteById(siteId) {
+  const site = await prisma.generatedSite.findUnique({ where: { id: siteId }, select: { slug: true } });
+  if (site?.slug) await revalidateSiteFrontendCache(site.slug);
+}
+
 async function getGeneratedSiteById(id) {
   const site = await prisma.generatedSite.findUnique({
     where: { id },
@@ -278,20 +197,6 @@ async function getGeneratedSiteById(id) {
   }
 
   return site;
-}
-
-async function ensureUniqueSiteSlugForUpdate(baseSlug, excludeId) {
-  let candidate = baseSlug;
-  let suffix = 2;
-
-  while (true) {
-    const existing = await prisma.generatedSite.findUnique({ where: { slug: candidate } });
-    if (!existing || existing.id === excludeId) {
-      return candidate;
-    }
-    candidate = `${baseSlug}-${suffix}`;
-    suffix += 1;
-  }
 }
 
 async function regenerateSiteContent(site) {
@@ -514,6 +419,21 @@ function buildSiteUpdateData(body) {
       body.projectsCompleted != null && body.projectsCompleted !== ''
         ? String(body.projectsCompleted).trim()
         : null;
+  }
+
+  if (body.searchIndexable !== undefined) {
+    if (typeof body.searchIndexable !== 'boolean') {
+      throw new AppError('Field `searchIndexable` must be true or false.', 400, {
+        code: 'INVALID_BODY',
+      });
+    }
+    updates.searchIndexable = body.searchIndexable;
+  }
+
+  if (body.leadLocationId !== undefined) {
+    // null/"" = unmap (leads are held). Existence is checked in the route.
+    updates.leadLocationId =
+      body.leadLocationId == null || body.leadLocationId === '' ? null : String(body.leadLocationId).trim();
   }
 
   if (body.status !== undefined) {
@@ -795,6 +715,13 @@ router.get(
 
     const { serviceSlug } = req.params;
 
+    // The site's current service list decides: a removed service is 404 even
+    // if its generated page is still stored.
+    const service = findServiceBySlug(site, serviceSlug);
+    if (!service) {
+      throw new AppError('Service not found for this site.', 404, { code: 'SERVICE_NOT_FOUND' });
+    }
+
     const existingPage = await prisma.servicePage.findUnique({
       where: { siteId_serviceSlug: { siteId: site.id, serviceSlug } },
     });
@@ -805,11 +732,6 @@ router.get(
         data: { content: parseJsonSafe(existingPage.content) },
         requestId: req.requestId,
       });
-    }
-
-    const service = findServiceBySlug(site, serviceSlug);
-    if (!service) {
-      throw new AppError('Service not found for this site.', 404, { code: 'SERVICE_NOT_FOUND' });
     }
 
     let servicePage;
@@ -850,6 +772,28 @@ router.get(
       data: { contacts, total, pagination },
       requestId: req.requestId,
     });
+  }),
+);
+
+/**
+ * Re-sends a held or failed lead once its site has a GHL location mapped.
+ * Manual only (dashboard button); leads are never retried automatically.
+ */
+router.post(
+  '/contacts/:id/send-to-ghl',
+  asyncHandler(async (req, res) => {
+    const submission = await prisma.contactSubmission.findUnique({
+      where: { id: req.params.id },
+      include: { site: true },
+    });
+    if (!submission) {
+      throw new AppError('Contact submission not found.', 404, { code: 'CONTACT_NOT_FOUND' });
+    }
+    if (submission.ghlStatus === 'SENT') {
+      throw new AppError('This lead was already sent to GHL.', 409, { code: 'LEAD_ALREADY_SENT' });
+    }
+    const result = await deliverLeadToGhl(submission.site, submission);
+    return res.json({ success: true, data: result, requestId: req.requestId });
   }),
 );
 
@@ -1007,6 +951,25 @@ router.delete(
   }),
 );
 
+/**
+ * Slugs of ACTIVE sites that may be indexed by search engines. The renderer's
+ * middleware uses this to set X-Robots-Tag; every other site is noindex.
+ */
+router.get(
+  '/indexable-sites',
+  asyncHandler(async (req, res) => {
+    const sites = await prisma.generatedSite.findMany({
+      where: { status: 'ACTIVE', searchIndexable: true },
+      select: { slug: true },
+    });
+    return res.json({
+      success: true,
+      data: { slugs: sites.map((s) => s.slug) },
+      requestId: req.requestId,
+    });
+  }),
+);
+
 router.get(
   '/sites',
   asyncHandler(async (req, res) => {
@@ -1039,9 +1002,33 @@ router.get(
   }),
 );
 
+/** Public contact form: per-IP limit to stop floods and abuse. */
+const contactRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many messages. Please try again later.' },
+  },
+});
+
+const CONTACT_LIMITS = { name: 120, email: 200, phone: 40, message: 5000 };
+
 router.post(
   '/sites/:slug/contact',
+  contactRateLimiter,
   asyncHandler(async (req, res) => {
+    // Honeypot: a hidden "website" field real visitors never fill. Bots that
+    // fill it get a normal-looking success; nothing is stored or sent.
+    if (String(req.body?.website ?? '').trim()) {
+      console.warn(JSON.stringify({ event: 'contact_honeypot_triggered', siteSlug: req.params.slug }));
+      return res
+        .status(201)
+        .json({ success: true, message: 'Message sent successfully', requestId: req.requestId });
+    }
+
     const site = await prisma.generatedSite.findUnique({
       where: { slug: req.params.slug },
     });
@@ -1064,6 +1051,17 @@ router.post(
     }
     if (!message) {
       throw new AppError('Field `message` is required.', 400, { code: 'INVALID_BODY' });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      throw new AppError('Field `email` must be a valid email address.', 400, { code: 'INVALID_BODY' });
+    }
+    const lengths = { name, email, phone: phone ?? '', message };
+    for (const [field, max] of Object.entries(CONTACT_LIMITS)) {
+      if (lengths[field].length > max) {
+        throw new AppError(`Field \`${field}\` must be at most ${max} characters.`, 400, {
+          code: 'INVALID_BODY',
+        });
+      }
     }
 
     const submission = await prisma.contactSubmission.create({
@@ -1089,7 +1087,8 @@ router.post(
       );
     }
 
-    await createGhlContactFromSubmission(site, submission);
+    // Only the GHL location mapped to this site; unmapped sites hold the lead.
+    await deliverLeadToGhl(site, submission);
 
     return res.status(201).json({
       success: true,
@@ -1137,10 +1136,8 @@ router.get(
   }),
 );
 
-router.post(
-  '/webhook',
-  webhookRateLimiter,
-  asyncHandler(async (req, res) => {
+/** Creates (or returns the existing) site for an intake payload. */
+async function handleSiteGenerationRequest(req, res) {
     const body = req.body ?? {};
     validateWebhookBody(body);
 
@@ -1176,8 +1173,16 @@ router.post(
       data: { slug: site.slug, site },
       requestId: req.requestId,
     });
-  }),
-);
+}
+
+/** Public intake for the order form (caller being confirmed; see phase4Auth). */
+router.post('/webhook', webhookRateLimiter, asyncHandler(handleSiteGenerationRequest));
+
+/**
+ * Dashboard "Form Submission (Test)": same generation, admin key required
+ * (any /phase4 route not listed as public/renderer/webhook is admin-only).
+ */
+router.post('/admin/generate-site', asyncHandler(handleSiteGenerationRequest));
 
 router.patch(
   '/sites/:id',
@@ -1190,17 +1195,35 @@ router.patch(
       throw new AppError('No valid fields to update.', 400, { code: 'INVALID_BODY' });
     }
 
+    if (updates.leadLocationId) {
+      const location = await prisma.location.findUnique({
+        where: { id: updates.leadLocationId },
+        select: { id: true },
+      });
+      if (!location) {
+        throw new AppError('Unknown lead location.', 400, { code: 'INVALID_LEAD_LOCATION' });
+      }
+    }
+
     const merged = { ...existing, ...updates };
     let data = { ...updates };
 
-    if (shouldRegenerateContent(existing, updates)) {
+    // Changing the URL needs a 301 from the old one; that needs the
+    // SiteRedirect table (pending approval), so it is refused for now.
+    if (req.body?.changeSlug === true) {
+      throw new AppError(
+        'Changing a site URL is disabled until old URLs can be redirected (301).',
+        409,
+        { code: 'SLUG_CHANGE_NEEDS_REDIRECTS' },
+      );
+    }
+
+    // Regeneration is explicit: editing name/industry/city only saves the
+    // fields unless the caller also sends regenerateContent: true. The URL
+    // (slug) never changes as a side effect.
+    if (req.body?.regenerateContent === true && shouldRegenerateContent(existing, updates)) {
       const regenerated = await regenerateSiteContent(merged);
       data = { ...data, ...regenerated };
-
-      const baseSlug = slugifySite(merged.businessName, merged.city);
-      if (baseSlug !== existing.slug) {
-        data.slug = await ensureUniqueSiteSlugForUpdate(baseSlug, id);
-      }
     }
 
     const site = await prisma.generatedSite.update({
@@ -1210,6 +1233,9 @@ router.patch(
     });
 
     await revalidateSiteFrontendCache(site.slug);
+    if (site.slug !== existing.slug) {
+      await revalidateSiteFrontendCache(existing.slug);
+    }
 
     return res.json({
       success: true,
@@ -1247,11 +1273,24 @@ router.post(
   asyncHandler(async (req, res) => {
     const locations = req.body?.locations;
     const pages = await generateLocationPages(req.params.siteId, locations);
+    await revalidateSiteById(req.params.siteId);
     return res.status(201).json({
       success: true,
       data: { pages },
       requestId: req.requestId,
     });
+  }),
+);
+
+/** Real towns within a ZIP radius, before generating any pages (admin only). */
+router.get(
+  '/sites/:siteId/location-pages/radius-preview',
+  asyncHandler(async (req, res) => {
+    const data = await previewRadiusTowns(req.params.siteId, {
+      zipCode: String(req.query.zipCode ?? req.query.zip ?? '').trim(),
+      radiusMiles: Number(req.query.radiusMiles ?? req.query.radius ?? 0),
+    });
+    return res.json({ success: true, data, requestId: req.requestId });
   }),
 );
 
@@ -1267,6 +1306,7 @@ router.post(
       radiusMiles,
       maxLocations,
     });
+    await revalidateSiteById(req.params.siteId);
 
     return res.status(201).json({
       success: true,
@@ -1335,6 +1375,7 @@ router.post(
       },
       include: { template: true },
     });
+    await revalidateSiteFrontendCache(site.slug);
 
     return res.status(201).json({
       success: true,
@@ -1366,7 +1407,7 @@ router.delete(
       });
     }
 
-    services.splice(serviceIndex, 1);
+    const [removed] = services.splice(serviceIndex, 1);
     if (serviceIndex < homeServices.length) {
       homeServices.splice(serviceIndex, 1);
     }
@@ -1379,6 +1420,15 @@ router.delete(
       },
       include: { template: true },
     });
+
+    // Drop the removed service's generated page (unless another listed service
+    // has the same slug), then purge the renderer cache so it 404s now.
+    const removedSlug = slugifySite(typeof removed?.title === 'string' ? removed.title : '');
+    const stillListed = services.some((s) => slugifySite(String(s?.title ?? '')) === removedSlug);
+    if (removedSlug && !stillListed) {
+      await prisma.servicePage.deleteMany({ where: { siteId: existing.id, serviceSlug: removedSlug } });
+    }
+    await revalidateSiteFrontendCache(site.slug);
 
     return res.json({
       success: true,
@@ -1400,6 +1450,7 @@ router.delete(
 
     await prisma.locationPage.deleteMany({ where: { siteId: id } });
     await prisma.generatedSite.delete({ where: { id } });
+    await revalidateSiteFrontendCache(existing.slug);
 
     return res.json({
       success: true,
