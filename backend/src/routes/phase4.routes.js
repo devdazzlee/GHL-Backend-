@@ -51,6 +51,19 @@ import {
   getAllTemplates,
   updateTemplate,
 } from '../services/template.service.js';
+import {
+  createBlogPost,
+  deleteBlogPost,
+  getBlogSettings,
+  getPublicBlog,
+  getPublicBlogPost,
+  importLegacyPosts,
+  listBlogPosts,
+  updateBlogPost,
+  updateBlogSettings,
+} from '../services/blog.service.js';
+import { uploadSiteImage } from '../services/media.service.js';
+import { parseImageMultipart } from '../middleware/mediaUpload.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -1529,6 +1542,99 @@ router.delete(
     const page = await deleteKeywordPage(req.params.siteId, req.params.id);
     await revalidateSiteById(req.params.siteId);
     return res.json({ success: true, data: { deleted: true, slug: page.slug }, requestId: req.requestId });
+  }),
+);
+
+// ---- Blog (per site; the renderer only ever sees published posts) ----
+
+router.get(
+  '/sites/:siteId/blog',
+  asyncHandler(async (req, res) => {
+    const [settings, posts] = await Promise.all([getBlogSettings(req.params.siteId), listBlogPosts(req.params.siteId)]);
+    return res.json({ success: true, data: { settings, posts }, requestId: req.requestId });
+  }),
+);
+
+/** Copies the posts generated with the site into the editable list (once; later calls do nothing). */
+router.post(
+  '/sites/:siteId/blog/import',
+  asyncHandler(async (req, res) => {
+    const result = await importLegacyPosts(req.params.siteId);
+    return res.json({ success: true, data: result, requestId: req.requestId });
+  }),
+);
+
+/** Body: { blogEnabled?, autoEnabled?, days?: number[], hour?: number, timezone?: string } */
+router.put(
+  '/sites/:siteId/blog/settings',
+  asyncHandler(async (req, res) => {
+    const settings = await updateBlogSettings(req.params.siteId, req.body ?? {});
+    return res.json({ success: true, data: { settings }, requestId: req.requestId });
+  }),
+);
+
+router.post(
+  '/sites/:siteId/blog/posts',
+  asyncHandler(async (req, res) => {
+    const post = await createBlogPost(req.params.siteId, req.body ?? {});
+    return res.status(201).json({ success: true, data: { post }, requestId: req.requestId });
+  }),
+);
+
+router.patch(
+  '/sites/:siteId/blog/posts/:postId',
+  asyncHandler(async (req, res) => {
+    const post = await updateBlogPost(req.params.siteId, req.params.postId, req.body ?? {});
+    return res.json({ success: true, data: { post }, requestId: req.requestId });
+  }),
+);
+
+router.delete(
+  '/sites/:siteId/blog/posts/:postId',
+  asyncHandler(async (req, res) => {
+    const result = await deleteBlogPost(req.params.siteId, req.params.postId);
+    return res.json({ success: true, data: result, requestId: req.requestId });
+  }),
+);
+
+const MAX_SITE_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/** Multipart field "file" (+ optional "kind"): stores an image for this site and returns its URL. */
+router.post(
+  '/sites/:siteId/uploads',
+  parseImageMultipart,
+  asyncHandler(async (req, res) => {
+    const { stat, unlink } = await import('node:fs/promises');
+    const file = req.uploadedFile;
+    try {
+      const site = await prisma.generatedSite.findUnique({ where: { id: req.params.siteId }, select: { id: true } });
+      if (!site) throw new AppError('Generated site not found.', 404, { code: 'SITE_NOT_FOUND' });
+      if ((await stat(file.path)).size > MAX_SITE_IMAGE_BYTES) {
+        throw new AppError('Images must be 8 MB or smaller.', 400, { code: 'FILE_TOO_LARGE' });
+      }
+      const kind = typeof req.body?.kind === 'string' ? req.body.kind : 'images';
+      const url = await uploadSiteImage(file.path, site.id, kind);
+      return res.status(201).json({ success: true, data: { url }, requestId: req.requestId });
+    } finally {
+      if (file?.path) await unlink(file.path).catch(() => {});
+    }
+  }),
+);
+
+/** Renderer: blog state + published post summaries (managed=false means "use blogContent"). */
+router.get(
+  '/sites/:slug/published-blog',
+  asyncHandler(async (req, res) => {
+    const blog = await getPublicBlog(req.params.slug);
+    return res.json({ success: true, data: blog, requestId: req.requestId });
+  }),
+);
+
+router.get(
+  '/sites/:slug/published-blog/:postSlug',
+  asyncHandler(async (req, res) => {
+    const post = await getPublicBlogPost(req.params.slug, req.params.postSlug);
+    return res.json({ success: true, data: { post }, requestId: req.requestId });
   }),
 );
 

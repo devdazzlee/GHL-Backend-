@@ -24,6 +24,8 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PORT: Number(process.env.PORT) || 4000,
   MOCK_MODE: truthyEnv('MOCK_MODE'),
+  /** Automatic blog posts run unless this is "false" (set it on local machines that share a database). */
+  BLOG_AUTOPUBLISH: String(process.env.BLOG_AUTOPUBLISH ?? '').toLowerCase() !== 'false',
   DATABASE_URL: process.env.DATABASE_URL ?? '',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? '',

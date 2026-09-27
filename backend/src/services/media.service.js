@@ -117,6 +117,26 @@ export async function uploadMedia(filePath, locationId, postType) {
 }
 
 /**
+ * Image for a generated site (blog cover, page section): stored in Cloudinary under
+ * peakwa-sites/{siteId}/{kind} so the URL stays the same until someone changes it.
+ * @returns {Promise<string>} secure URL
+ */
+export async function uploadSiteImage(filePath, siteId, kind) {
+  const folder = `peakwa-sites/${siteId}/${String(kind || 'images').replace(/[^a-z0-9-]/gi, '')}`;
+  if (env.MOCK_MODE) {
+    console.info(JSON.stringify({ event: 'cloudinary_upload_mock', siteId, folder, filePath }));
+    return PLACEHOLDER_IMAGE_URL;
+  }
+  ensureCloudinaryConfigured();
+  try {
+    const result = await cloudinary.uploader.upload(filePath, { folder, resource_type: 'image' });
+    return result.secure_url;
+  } catch (e) {
+    throw new AppError(`Cloudinary upload failed: ${e.message}`, 502, { code: 'CLOUDINARY_UPLOAD_ERROR' });
+  }
+}
+
+/**
  * Picks a random image URL from Cloudinary folder (or DB fallback).
  */
 export async function getMediaForPost(locationId, postType) {
