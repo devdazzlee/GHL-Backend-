@@ -100,38 +100,41 @@ function buildSectionQuery(site, sectionKey, services) {
   return `${industry} professional`;
 }
 
+/** Thrown when Pexels answers 429, so picking stops and backs off instead of hammering it. */
+export class PexelsRateLimitError extends Error {
+  constructor() {
+    super('Pexels rate limit (HTTP 429)');
+    this.rateLimited = true;
+  }
+}
+
+async function searchPexelsPage(apiKey, query, page) {
+  const params = new URLSearchParams({ query, per_page: '15', orientation: 'landscape', page: String(page) });
+  const res = await fetch(`https://api.pexels.com/v1/search?${params}`, { headers: { Authorization: apiKey } });
+  if (res.status === 429) throw new PexelsRateLimitError();
+  if (!res.ok) throw new Error(`Pexels request failed: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.photos) ? data.photos : [];
+}
+
 async function fetchPexelsImage(query) {
   const apiKey = env.PEXELS_API_KEY?.trim();
-  if (!apiKey || !String(query ?? '').trim()) {
+  const q = String(query ?? '').trim();
+  if (!apiKey || !q) {
     return null;
   }
 
   try {
+    // A random results page gives variety, but narrow searches often have
+    // fewer pages; an empty page falls back to the first one.
     const page = Math.floor(Math.random() * 5) + 1;
-    const params = new URLSearchParams({
-      query: String(query).trim(),
-      per_page: '15',
-      orientation: 'landscape',
-      page: String(page),
-    });
-
-    const res = await fetch(`https://api.pexels.com/v1/search?${params}`, {
-      headers: { Authorization: apiKey },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Pexels request failed: ${res.status}`);
-    }
-
-    const data = await res.json();
-    const photos = data.photos;
-    if (!Array.isArray(photos) || photos.length === 0) {
-      return null;
-    }
-
+    let photos = await searchPexelsPage(apiKey, q, page);
+    if (photos.length === 0 && page > 1) photos = await searchPexelsPage(apiKey, q, 1);
+    if (photos.length === 0) return null;
     const photo = photos[Math.floor(Math.random() * photos.length)];
     return photo?.src?.large2x ?? null;
-  } catch {
+  } catch (error) {
+    if (error?.rateLimited) throw error;
     return null;
   }
 }
@@ -212,29 +215,106 @@ function setEntry(store, slot, entry) {
   else store[slot.kind] = entry;
 }
 
+// Automatic picking is paced: Pexels answers bursts with HTTP 429.
+export const PICK_COOLDOWN_MS = 10 * 60 * 1000;
+const MAX_BACKGROUND_ATTEMPTS = 6;
+let pickCooldownUntil = 0;
+const picksInFlight = new Map();
+const backgroundFills = new Map();
+
+/** Tests only. */
+export function resetImagePickState() {
+  pickCooldownUntil = 0;
+  picksInFlight.clear();
+  for (const entry of backgroundFills.values()) clearTimeout(entry.timer);
+  backgroundFills.clear();
+}
+
+/** Picks the empty slots one at a time; stops at the first 429 and starts a cooldown. */
+async function pickMissing(site, missing, titles, autoPickFn) {
+  const found = [];
+  for (const slot of missing) {
+    if (Date.now() < pickCooldownUntil) break;
+    try {
+      const url = await autoPickFn(site, slot, titles);
+      if (url) found.push([slot, url]);
+    } catch (error) {
+      if (!error?.rateLimited) throw error;
+      pickCooldownUntil = Date.now() + PICK_COOLDOWN_MS;
+      console.warn(JSON.stringify({ event: 'site_image_pick_rate_limited', siteId: site.id, cooldownMs: PICK_COOLDOWN_MS }));
+      break;
+    }
+  }
+  if (found.length === 0) return 0;
+  // Re-read and fill only slots that are still empty, so an image chosen in
+  // the dashboard meanwhile is never overwritten by an automatic pick.
+  const latest = await prisma.generatedSite.findUnique({ where: { id: site.id }, select: { imagesContent: true } });
+  const store = readStore(latest);
+  let filled = 0;
+  for (const [slot, url] of found) {
+    if (!getEntry(store, slot)?.url) {
+      setEntry(store, slot, { url, source: 'AUTO' });
+      filled += 1;
+    }
+  }
+  await prisma.generatedSite.update({ where: { id: site.id }, data: { imagesContent: JSON.stringify(store) } });
+  return filled;
+}
+
+/** Tries again later for slots that are still empty, and refreshes the site's pages when some fill. */
+function scheduleBackgroundFill(siteId, autoPickFn) {
+  const previous = backgroundFills.get(siteId);
+  if (previous?.timer) return;
+  const attempts = (previous?.attempts ?? 0) + 1;
+  if (attempts > MAX_BACKGROUND_ATTEMPTS) return;
+  const delay = Math.max(pickCooldownUntil - Date.now(), 0) + 60_000 * attempts;
+  const timer = setTimeout(async () => {
+    backgroundFills.set(siteId, { attempts, timer: null });
+    try {
+      const site = await prisma.generatedSite.findUnique({ where: { id: siteId } });
+      if (!site) return;
+      const result = await fillSite(site, autoPickFn);
+      if (result.filled > 0) await revalidateSiteFrontendCache(site.slug);
+      if (result.missing === 0) backgroundFills.delete(siteId);
+      else scheduleBackgroundFill(siteId, autoPickFn);
+    } catch (error) {
+      console.warn(JSON.stringify({ event: 'site_image_background_fill_failed', siteId, error: error?.message }));
+    }
+  }, delay);
+  timer.unref?.();
+  backgroundFills.set(siteId, { attempts, timer });
+}
+
+/** One pick run per site at a time; concurrent page renders share it. */
+function fillSite(site, autoPickFn) {
+  if (picksInFlight.has(site.id)) return picksInFlight.get(site.id);
+  const run = (async () => {
+    const slots = imageSlots(site);
+    const missing = slots.filter((slot) => !getEntry(readStore(site), slot)?.url);
+    if (missing.length === 0) return { filled: 0, missing: 0 };
+    const filled = Date.now() < pickCooldownUntil ? 0 : await pickMissing(site, missing, serviceTitles(site), autoPickFn);
+    return { filled, missing: missing.length - filled };
+  })().finally(() => picksInFlight.delete(site.id));
+  picksInFlight.set(site.id, run);
+  return run;
+}
+
 /**
  * The site's images for the renderer, picking and storing any slot that has
  * no image yet. Stored images are returned as they are; nothing is re-picked.
+ * Slots that could not be picked now are retried in the background.
  */
-export async function getStoredSiteImages(site, { autoPickFn = defaultAutoPick } = {}) {
+export async function getStoredSiteImages(site, { autoPickFn = defaultAutoPick, background = true } = {}) {
   const slots = imageSlots(site);
-  const titles = serviceTitles(site);
   let store = readStore(site);
-  const missing = slots.filter((slot) => !getEntry(store, slot)?.url);
 
-  if (missing.length > 0) {
-    const picks = await Promise.all(missing.map(async (slot) => [slot, await autoPickFn(site, slot, titles)]));
-    const found = picks.filter(([, url]) => url);
-    if (found.length > 0) {
-      // Re-read and fill only slots that are still empty, so an image chosen in
-      // the dashboard meanwhile is never overwritten by an automatic pick.
+  if (slots.some((slot) => !getEntry(store, slot)?.url)) {
+    const result = await fillSite(site, autoPickFn);
+    if (result.filled > 0) {
       const latest = await prisma.generatedSite.findUnique({ where: { id: site.id }, select: { imagesContent: true } });
       store = readStore(latest);
-      for (const [slot, url] of found) {
-        if (!getEntry(store, slot)?.url) setEntry(store, slot, { url, source: 'AUTO' });
-      }
-      await prisma.generatedSite.update({ where: { id: site.id }, data: { imagesContent: JSON.stringify(store) } });
     }
+    if (result.missing > 0 && background) scheduleBackgroundFill(site.id, autoPickFn);
   }
 
   const url = (slot) => getEntry(store, slot)?.url ?? null;
