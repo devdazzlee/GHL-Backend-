@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Mail,
   Palette,
-  Send,
   PlayCircle,
   Settings2,
   Share2,
@@ -36,7 +35,6 @@ const phase4NavItems = [
   { to: '/sites', label: 'Generated Sites', icon: Globe },
   { to: '/industry-schemas', label: 'Industry Schemas', icon: Database },
   { to: '/contacts', label: 'Contact Submissions', icon: Mail },
-  { to: '/form-test', label: 'Form Submission (Test)', icon: Send },
 ];
 
 function navClass(isActive: boolean) {
