@@ -50,6 +50,7 @@ import {
 import { CardListSkeleton } from '../components/ui/skeleton';
 import { SITE_BASE_URL } from '../config/config';
 import { BlogPanel } from '../components/BlogPanel';
+import { SiteAddressPanel } from '../components/SiteAddressPanel';
 import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
@@ -1696,6 +1697,16 @@ export function GeneratedSitesPage() {
                     </Button>
                   </div>
                 </form>
+              ) : null}
+
+              {editTab === 'business' && editTarget ? (
+                <SiteAddressPanel
+                  key={editTarget.id}
+                  siteId={editTarget.id}
+                  slug={editTarget.slug}
+                  siteBaseUrl={SITE_URL}
+                  onChanged={(updated) => void refreshAfterEdit(updated, 'Site address changed. Old links now redirect to the new address.')}
+                />
               ) : null}
 
               {editTab === 'colors' ? (

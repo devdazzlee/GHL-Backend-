@@ -63,6 +63,7 @@ import {
   updateBlogSettings,
 } from '../services/blog.service.js';
 import { uploadSiteImage } from '../services/media.service.js';
+import { changeSiteSlug, getRedirectMap, listSiteRedirects } from '../services/siteRedirects.service.js';
 import { getStoredSiteImages, listImageSlots, searchStockPhotos, setSiteImage } from '../services/siteImages.service.js';
 import {
   getPageEditor,
@@ -1047,14 +1048,11 @@ router.patch(
     const merged = { ...existing, ...updates };
     let data = { ...updates };
 
-    // Changing the URL needs a 301 from the old one; that needs the
-    // SiteRedirect table (pending approval), so it is refused for now.
+    // The URL only changes through POST /sites/:id/change-url (which adds the 301).
     if (req.body?.changeSlug === true) {
-      throw new AppError(
-        'Changing a site URL is disabled until old URLs can be redirected (301).',
-        409,
-        { code: 'SLUG_CHANGE_NEEDS_REDIRECTS' },
-      );
+      throw new AppError('Use POST /sites/:id/change-url to change a site address.', 400, {
+        code: 'USE_CHANGE_URL',
+      });
     }
 
     // Regeneration is explicit: editing name/industry/city only saves the
@@ -1366,6 +1364,39 @@ router.delete(
     const page = await deleteKeywordPage(req.params.siteId, req.params.id);
     await revalidateSiteById(req.params.siteId);
     return res.json({ success: true, data: { deleted: true, slug: page.slug }, requestId: req.requestId });
+  }),
+);
+
+// ---- Site address (slug) changes with 301s from every old URL ----
+
+/** Body: { slug } — the new address. The old one keeps working as a 301 to the new one. */
+router.post(
+  '/sites/:id/change-url',
+  asyncHandler(async (req, res) => {
+    const result = await changeSiteSlug(req.params.id, req.body?.slug);
+    const site = await getGeneratedSiteById(req.params.id);
+    return res.json({
+      success: true,
+      data: { site: serializeSiteWithTheme(site), oldSlug: result.oldSlug, newSlug: result.newSlug, redirects: result.redirects },
+      requestId: req.requestId,
+    });
+  }),
+);
+
+router.get(
+  '/sites/:id/redirects',
+  asyncHandler(async (req, res) => {
+    const redirects = await listSiteRedirects(req.params.id);
+    return res.json({ success: true, data: { redirects }, requestId: req.requestId });
+  }),
+);
+
+/** Renderer: every old slug and the site's current slug. */
+router.get(
+  '/site-redirects',
+  asyncHandler(async (req, res) => {
+    const redirects = await getRedirectMap();
+    return res.json({ success: true, data: { redirects }, requestId: req.requestId });
   }),
 );
 

@@ -289,6 +289,7 @@ model GeneratedSite {
   locationPages   LocationPage[]
   keywordPages    KeywordPage[]
   blogPosts       BlogPost[]
+  redirects       SiteRedirect[]
   contactSubmissions ContactSubmission[]
   servicePages    ServicePage[]
   createdAt       DateTime       @default(now())
@@ -411,4 +412,16 @@ model BlogPost {
   @@unique([siteId, slug])
   @@unique([siteId, autoSlot])
   @@index([siteId, status])
+}
+
+/// Old site URLs. /{fromSlug}/... answers 301 to the same path under the site's current slug.
+/// Points at the site (not a slug), so repeated renames all lead to the current address.
+model SiteRedirect {
+  id        String        @id @default(cuid())
+  fromSlug  String        @unique
+  siteId    String
+  site      GeneratedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@index([siteId])
 }

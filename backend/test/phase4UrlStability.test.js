@@ -60,10 +60,10 @@ describe('item 9: URL stability', () => {
     assert.equal(updates.length, 0);
   });
 
-  it('refuses a URL change until redirects exist', async () => {
+  it('never changes the URL through the edit form (only the change-url action, which adds redirects)', async () => {
     const r = await patch({ businessName: 'New Name', changeSlug: true });
-    assert.equal(r.status, 409);
-    assert.equal(r.json.error.code, 'SLUG_CHANGE_NEEDS_REDIRECTS');
+    assert.equal(r.status, 400);
+    assert.equal(r.json.error.code, 'USE_CHANGE_URL');
     assert.equal(updates.length, 0);
   });
 });

@@ -1,3 +1,4 @@
+import { isSlugAvailable } from './siteRedirects.service.js';
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
 import prisma from '../database/client.js';
@@ -175,7 +176,8 @@ async function ensureUniqueSiteSlug(baseSlug) {
   let candidate = baseSlug;
   let suffix = 2;
 
-  while (await prisma.generatedSite.findUnique({ where: { slug: candidate } })) {
+  // A slug that an older site address redirects from is taken too.
+  while (!(await isSlugAvailable(candidate))) {
     candidate = `${baseSlug}-${suffix}`;
     suffix += 1;
   }
