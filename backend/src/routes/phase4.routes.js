@@ -31,6 +31,7 @@ import {
   updateIndustrySchema,
 } from '../services/industrySchema.service.js';
 import { listContactSubmissions } from '../services/contactSubmission.service.js';
+import { deliverLeadToGhl } from '../services/siteLeads.service.js';
 import {
   createTemplate,
   deleteTemplate,
@@ -93,7 +94,6 @@ function validateWebhookBody(body) {
 const HERO_STYLES = new Set(['dark', 'light']);
 const FONT_STYLES = new Set(['modern', 'classic', 'friendly']);
 const SITE_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE']);
-const GHL_VERSION = '2021-07-28';
 
 async function sendContactNotificationEmail(site, submission) {
   const subject = `New contact from ${site.businessName} website`;
@@ -157,97 +157,6 @@ async function sendContactNotificationEmail(site, submission) {
   );
 
   return info;
-}
-
-async function resolveGhlLocationForSite(site) {
-  const locations = await prisma.location.findMany({
-    where: {
-      status: 'ACTIVE',
-      ghlApiKey: { not: null },
-    },
-    include: {
-      business: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  const withKey = locations.filter((location) => location.ghlApiKey?.trim());
-  if (withKey.length === 0) {
-    return null;
-  }
-
-  const normalizedIndustry = String(site.industry ?? '')
-    .trim()
-    .toLowerCase();
-
-  const industryMatch = withKey.find((location) => {
-    const businessName = String(location.business?.name ?? '').toLowerCase();
-    return normalizedIndustry && businessName.includes(normalizedIndustry);
-  });
-
-  return industryMatch ?? withKey[0];
-}
-
-async function createGhlContactFromSubmission(site, submission) {
-  const location = await resolveGhlLocationForSite(site);
-  if (!location?.ghlApiKey?.trim()) {
-    console.warn(
-      JSON.stringify({
-        event: 'ghl_contact_skipped',
-        reason: 'No active location with ghlApiKey found',
-        siteSlug: site.slug,
-      }),
-    );
-    return { skipped: true };
-  }
-
-  if (env.MOCK_MODE) {
-    console.info(
-      JSON.stringify({
-        event: 'ghl_contact_mock',
-        siteSlug: site.slug,
-        ghlLocationId: location.ghlLocationId,
-        email: submission.email,
-      }),
-    );
-    return { mock: true };
-  }
-
-  try {
-    const response = await fetch('https://services.leadconnectorhq.com/contacts/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${location.ghlApiKey.trim()}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Version: GHL_VERSION,
-      },
-      body: JSON.stringify({
-        locationId: location.ghlLocationId,
-        firstName: submission.name,
-        email: submission.email,
-        phone: submission.phone ?? undefined,
-        source: 'Website Contact Form',
-        tags: ['website-lead', site.industry],
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`GHL contacts API failed: ${response.status} ${body}`);
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        event: 'ghl_contact_failed',
-        siteSlug: site.slug,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    return { success: false };
-  }
 }
 
 function slugifySite(...parts) {
@@ -523,6 +432,12 @@ function buildSiteUpdateData(body) {
       });
     }
     updates.searchIndexable = body.searchIndexable;
+  }
+
+  if (body.leadLocationId !== undefined) {
+    // null/"" = unmap (leads are held). Existence is checked in the route.
+    updates.leadLocationId =
+      body.leadLocationId == null || body.leadLocationId === '' ? null : String(body.leadLocationId).trim();
   }
 
   if (body.status !== undefined) {
@@ -862,6 +777,28 @@ router.get(
   }),
 );
 
+/**
+ * Re-sends a held or failed lead once its site has a GHL location mapped.
+ * Manual only (dashboard button); leads are never retried automatically.
+ */
+router.post(
+  '/contacts/:id/send-to-ghl',
+  asyncHandler(async (req, res) => {
+    const submission = await prisma.contactSubmission.findUnique({
+      where: { id: req.params.id },
+      include: { site: true },
+    });
+    if (!submission) {
+      throw new AppError('Contact submission not found.', 404, { code: 'CONTACT_NOT_FOUND' });
+    }
+    if (submission.ghlStatus === 'SENT') {
+      throw new AppError('This lead was already sent to GHL.', 409, { code: 'LEAD_ALREADY_SENT' });
+    }
+    const result = await deliverLeadToGhl(submission.site, submission);
+    return res.json({ success: true, data: result, requestId: req.requestId });
+  }),
+);
+
 router.delete(
   '/contacts/:id',
   asyncHandler(async (req, res) => {
@@ -1152,7 +1089,8 @@ router.post(
       );
     }
 
-    await createGhlContactFromSubmission(site, submission);
+    // Only the GHL location mapped to this site; unmapped sites hold the lead.
+    await deliverLeadToGhl(site, submission);
 
     return res.status(201).json({
       success: true,
@@ -1251,6 +1189,16 @@ router.patch(
 
     if (Object.keys(updates).length === 0) {
       throw new AppError('No valid fields to update.', 400, { code: 'INVALID_BODY' });
+    }
+
+    if (updates.leadLocationId) {
+      const location = await prisma.location.findUnique({
+        where: { id: updates.leadLocationId },
+        select: { id: true },
+      });
+      if (!location) {
+        throw new AppError('Unknown lead location.', 400, { code: 'INVALID_LEAD_LOCATION' });
+      }
     }
 
     const merged = { ...existing, ...updates };

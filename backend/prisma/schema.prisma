@@ -112,6 +112,7 @@ model Location {
   media              Media[]
   auditLogs          AuditLog[]
   schedule           LocationSchedule?
+  leadSites          GeneratedSite[]  @relation("SiteLeadLocation")
 
   @@index([businessId])
 }
@@ -266,6 +267,10 @@ model GeneratedSite {
   /// Search engines may index this site only when true. Null/false = noindex
   /// (the default for every generated site, including demo businesses).
   searchIndexable Boolean?
+  /// GHL location (Location.id) that receives this site's contact-form leads.
+  /// Null = not mapped: leads are kept in our database and flagged, never sent elsewhere.
+  leadLocationId  String?
+  leadLocation    Location?      @relation("SiteLeadLocation", fields: [leadLocationId], references: [id], onDelete: SetNull)
   locationPages   LocationPage[]
   contactSubmissions ContactSubmission[]
   servicePages    ServicePage[]
@@ -309,6 +314,11 @@ model ContactSubmission {
   email     String
   phone     String?
   message   String
+  /// Delivery to GHL: SENT | HELD_NO_LOCATION | HELD_NO_KEY | FAILED | SKIPPED_MOCK
+  ghlStatus     String?
+  ghlLocationId String?
+  ghlContactId  String?
+  ghlError      String?
   createdAt DateTime      @default(now())
 
   @@index([siteId])

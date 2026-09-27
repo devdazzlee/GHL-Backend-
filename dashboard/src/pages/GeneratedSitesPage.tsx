@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { Button } from '../components/ui/button';
+import { useLocations } from '../contexts/LocationsContext';
 import {
   Dialog,
   DialogContent,
@@ -483,6 +484,7 @@ export function GeneratedSitesPage() {
   const [editTarget, setEditTarget] = useState<SiteWithTheme | null>(null);
   const [editTab, setEditTab] = useState<EditTab>('business');
   const [editData, setEditData] = useState<Record<string, string>>({});
+  const { locations: ghlLocations } = useLocations();
   const [savingBusiness, setSavingBusiness] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
@@ -519,6 +521,7 @@ export function GeneratedSitesPage() {
       logoUrl: siteData.logoUrl || '',
       status: siteData.status || 'ACTIVE',
       searchIndexable: siteData.searchIndexable === true ? 'true' : 'false',
+      leadLocationId: siteData.leadLocationId ?? '',
     });
   }
 
@@ -717,6 +720,7 @@ export function GeneratedSitesPage() {
       const updated = await updatePhase4Site(editTarget.id, {
         status: (editData.status || 'ACTIVE') as SiteStatus,
         searchIndexable: editData.searchIndexable === 'true',
+        leadLocationId: editData.leadLocationId || null,
       });
       await refreshAfterEdit(updated, 'Status updated.');
     } catch (err) {
@@ -1827,6 +1831,28 @@ export function GeneratedSitesPage() {
                         <SelectItem value="INACTIVE">INACTIVE</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                      Lead destination (GHL location)
+                    </label>
+                    <select
+                      value={editData.leadLocationId ?? ''}
+                      onChange={(e) =>
+                        setEditData((prev) => ({ ...prev, leadLocationId: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    >
+                      <option value="">Not mapped: keep leads in Peakwa and flag them</option>
+                      {ghlLocations.map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.businessName} ({loc.ghlLocationId})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Contact-form leads from this site go only to this location.
+                    </p>
                   </div>
                   <label className="flex items-start gap-3 rounded-lg border border-slate-800 p-3 text-sm">
                     <input

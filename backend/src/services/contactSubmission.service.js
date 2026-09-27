@@ -16,6 +16,13 @@ export async function listContactSubmissions(query = {}) {
   const search = String(query.search ?? '').trim();
 
   const where = {};
+  // ghlStatus=FLAGGED lists leads that did not reach GHL (held or failed).
+  const ghlStatus = String(query.ghlStatus ?? '').trim().toUpperCase();
+  if (ghlStatus === 'FLAGGED') {
+    where.ghlStatus = { in: ['HELD_NO_LOCATION', 'HELD_NO_KEY', 'FAILED'] };
+  } else if (ghlStatus) {
+    where.ghlStatus = ghlStatus;
+  }
 
   if (search) {
     where.OR = [

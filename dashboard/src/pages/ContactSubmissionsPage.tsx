@@ -3,8 +3,21 @@ import { Loader2, Mail, Search, Trash2 } from 'lucide-react';
 import {
   deleteContactSubmission,
   fetchContactsPaginated,
+  sendContactToGhl,
   type ContactSubmission,
 } from '../api/endpoints';
+
+const GHL_STATUS_LABEL: Record<string, string> = {
+  SENT: 'Sent to GHL',
+  HELD_NO_LOCATION: 'Held: no GHL location mapped to this site',
+  HELD_NO_KEY: 'Held: mapped GHL location has no API key',
+  FAILED: 'Failed to send to GHL',
+  SKIPPED_MOCK: 'Not sent (mock mode)',
+};
+
+function isFlagged(contact: ContactSubmission): boolean {
+  return ['HELD_NO_LOCATION', 'HELD_NO_KEY', 'FAILED'].includes(contact.ghlStatus ?? '');
+}
 import {
   ErrorBanner,
   PageHeader,
@@ -60,6 +73,9 @@ function ContactCard({
           <div className="min-w-0">
             <p className="font-medium text-white">{contact.name}</p>
             <p className="mt-0.5 truncate text-sm text-slate-400">{contact.email}</p>
+            {isFlagged(contact) ? (
+              <p className="mt-1 text-xs font-medium text-amber-300">Not in GHL</p>
+            ) : null}
           </div>
           <span className="shrink-0 text-xs text-slate-500">{formatDate(contact.createdAt)}</span>
         </div>
@@ -305,12 +321,36 @@ export function ContactSubmissionsPage() {
                 </div>
               </div>
               <div>
+                <p className="text-xs text-slate-500">GHL delivery</p>
+                <p className={`text-sm ${isFlagged(selected) ? 'text-amber-300' : 'text-slate-200'}`}>
+                  {selected.ghlStatus ? (GHL_STATUS_LABEL[selected.ghlStatus] ?? selected.ghlStatus) : 'Not recorded (older lead)'}
+                </p>
+                {selected.ghlError ? <p className="mt-1 text-xs text-slate-500">{selected.ghlError}</p> : null}
+              </div>
+              <div>
                 <p className="mb-2 text-xs text-slate-500">Message</p>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm whitespace-pre-wrap text-slate-300">
                   {selected.message}
                 </div>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                {selected.ghlStatus !== 'SENT' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      const target = selected;
+                      setSelected(null);
+                      try {
+                        await sendContactToGhl(target.id);
+                      } finally {
+                        await loadContacts();
+                      }
+                    }}
+                  >
+                    Send to GHL
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"

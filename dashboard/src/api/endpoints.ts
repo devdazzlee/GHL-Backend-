@@ -394,6 +394,8 @@ export interface Phase4GeneratedSite {
   status: SiteStatus;
   /** Search engines may index the site only when true (default: noindex). */
   searchIndexable?: boolean | null;
+  /** Location.id that receives this site's leads; null = leads are held. */
+  leadLocationId?: string | null;
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -451,6 +453,7 @@ export interface Phase4SiteUpdatePayload {
   projectsCompleted?: string | null;
   status?: SiteStatus;
   searchIndexable?: boolean;
+  leadLocationId?: string | null;
 }
 
 export async function fetchPhase4TemplatesPaginated(
@@ -680,10 +683,24 @@ export interface ContactSubmission {
   phone: string | null;
   message: string;
   createdAt: string;
+  /** SENT | HELD_NO_LOCATION | HELD_NO_KEY | FAILED | SKIPPED_MOCK (null for older leads). */
+  ghlStatus?: string | null;
+  ghlLocationId?: string | null;
+  ghlError?: string | null;
   site?: {
     businessName: string;
     slug: string;
   };
+}
+
+/** Sends a held or failed lead to the GHL location now mapped to its site. */
+export async function sendContactToGhl(
+  id: string,
+): Promise<{ ghlStatus: string; ghlError?: string | null }> {
+  const { data } = await api.post<ApiResponse<{ ghlStatus: string; ghlError?: string | null }>>(
+    `/phase4/contacts/${id}/send-to-ghl`,
+  );
+  return data.data;
 }
 
 export async function fetchIndustrySchemasPaginated(
