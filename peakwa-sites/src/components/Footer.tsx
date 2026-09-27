@@ -141,13 +141,15 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
   const base = `/${site.slug}`;
   const socialLinks = buildSocialLinks(site);
 
-  const links = [
-    ['Home', base],
-    ['About', `${base}/about`],
-    ['Services', `${base}/services`],
-    ['Blog', `${base}/blog`],
-    ['Contact', `${base}/contact`],
-  ] as const;
+  const links = (
+    [
+      ['Home', base],
+      ['About', `${base}/about`],
+      ['Services', `${base}/services`],
+      ['Blog', `${base}/blog`],
+      ['Contact', `${base}/contact`],
+    ] as const
+  ).filter(([label]) => label !== 'Blog' || site.blogEnabled !== false);
 
   const poweredBy = (
     <p className="pb-5 text-center text-xs" style={{ color: mutedText }}>

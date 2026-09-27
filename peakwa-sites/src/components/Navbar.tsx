@@ -65,6 +65,9 @@ export function Navbar({
     return pathname.startsWith(`${base}${href}`);
   }
 
+  // The Blog link disappears when the site's blog is switched off.
+  const navLinks = NAV_LINKS.filter((link) => link.href !== '/blog' || site.blogEnabled !== false);
+
   const desktopLinks = (
     <nav
       className={clsx(
@@ -72,7 +75,7 @@ export function Navbar({
         centered && 'justify-center',
       )}
     >
-      {NAV_LINKS.map((link) => {
+      {navLinks.map((link) => {
         if (link.label === 'Services' && services.length > 0) {
           return (
             <div key={link.label} className="relative group">
@@ -281,7 +284,7 @@ export function Navbar({
           }}
         >
           <div className="flex flex-col gap-2">
-            {NAV_LINKS.map((link) => (
+            {navLinks.map((link) => (
               <Link
                 key={link.label}
                 href={`${base}${link.href}`}

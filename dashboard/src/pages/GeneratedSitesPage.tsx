@@ -49,6 +49,7 @@ import {
 } from '../components/ui/select';
 import { CardListSkeleton } from '../components/ui/skeleton';
 import { SITE_BASE_URL } from '../config/config';
+import { BlogPanel } from '../components/BlogPanel';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../utils/format';
@@ -1267,6 +1268,8 @@ export function GeneratedSitesPage() {
                     </div>
                   )}
                 </div>
+              ) : activeTab === 'blog' ? (
+                <BlogPanel key={selectedSite.id} siteId={selectedSite.id} siteSlug={selectedSite.slug} siteBaseUrl={SITE_URL} />
               ) : activeTab === 'keywords' ? (
                 <KeywordPagesPanel
                   key={selectedSite.id}

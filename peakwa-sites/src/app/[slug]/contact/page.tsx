@@ -191,7 +191,7 @@ export default async function ContactPage({ params }: PageProps) {
           { label: 'All services', href: 'services' },
           ...serviceRelatedLinks(servicesCatalog.services, { limit: 2 }),
           { label: 'Our story', href: 'about' },
-          { label: 'Read the blog', href: 'blog' },
+          ...(site.blogEnabled !== false ? [{ label: 'Read the blog', href: 'blog' }] : []),
         ]}
       />
     </>

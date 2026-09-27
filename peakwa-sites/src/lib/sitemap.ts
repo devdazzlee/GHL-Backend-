@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { SITE_BASE_URL } from '@/src/config';
 import { getLocationPages, getPublishedKeywordPages } from '@/src/lib/api';
-import { parseJson, type BlogContent, type ServicesContent } from '@/src/lib/content';
+import { getBlogListing } from '@/src/lib/blog';
+import { parseJson, type ServicesContent } from '@/src/lib/content';
 import type { GeneratedSite } from '@/src/lib/types';
 
 function slugifyService(title: string): string {
@@ -26,7 +27,6 @@ export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<Meta
     { url: baseUrl, lastModified, changeFrequency: 'weekly', priority: 1 },
     { url: `${baseUrl}/about`, lastModified, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${baseUrl}/services`, lastModified, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${baseUrl}/blog`, lastModified, changeFrequency: 'weekly', priority: 0.7 },
     { url: `${baseUrl}/contact`, lastModified, changeFrequency: 'yearly', priority: 0.6 },
   ];
 
@@ -42,15 +42,19 @@ export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<Meta
     });
   }
 
-  const blog = parseJson<BlogContent>(site.blogContent, {});
-  (blog.posts ?? []).forEach((_, index) => {
-    entries.push({
-      url: `${baseUrl}/blog/${index}`,
-      lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.65,
-    });
-  });
+  // Blog index and posts only while the site's blog is on.
+  const blog = await getBlogListing(site);
+  if (blog.enabled) {
+    entries.push({ url: `${baseUrl}/blog`, lastModified, changeFrequency: 'weekly', priority: 0.7 });
+    for (const post of blog.posts) {
+      entries.push({
+        url: `${baseUrl}/blog/${post.key}`,
+        lastModified: post.updatedAt ? new Date(post.updatedAt) : lastModified,
+        changeFrequency: 'monthly',
+        priority: 0.65,
+      });
+    }
+  }
 
   try {
     const locations = await getLocationPages(site.slug);
