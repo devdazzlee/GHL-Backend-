@@ -2,16 +2,21 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
   deleteKeywordPage,
-  generateKeywordPages,
+  getKeywordJob,
   listKeywordPages,
   setKeywordPagePublished,
+  startKeywordGeneration,
   type KeywordGenerationResult,
+  type KeywordJob,
   type KeywordPage,
   type KeywordPageContent,
 } from '../api/keywordPages';
 import { Button } from './ui/button';
 
 const MAX_PER_REQUEST = 10;
+const POLL_MS = 4000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface Props {
   siteId: string;
@@ -47,6 +52,7 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
   const [lastRun, setLastRun] = useState<KeywordGenerationResult | null>(null);
   const [preview, setPreview] = useState<KeywordPage | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [progress, setProgress] = useState<KeywordJob | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +132,20 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
             type="button"
             disabled={busy || pageCount === 0 || pageCount > MAX_PER_REQUEST}
             onClick={async () => {
-              const result = await run(() => generateKeywordPages(siteId, { keywords, locationPageIds: chosen }));
+              const result = await run(async () => {
+                let job = await startKeywordGeneration(siteId, { keywords, locationPageIds: chosen });
+                setProgress(job);
+                while (job.status === 'running') {
+                  await sleep(POLL_MS);
+                  job = await getKeywordJob(siteId, job.id);
+                  setProgress(job);
+                  setReloadKey((k) => k + 1);
+                }
+                setProgress(null);
+                if (job.status === 'failed' || !job.result) throw new Error(job.error ?? 'Generation failed');
+                return job.result;
+              });
+              setProgress(null);
               if (result) setLastRun(result);
             }}
           >
@@ -134,6 +153,12 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
             Generate drafts
           </Button>
         </div>
+        {progress ? (
+          <p className="mt-3 text-xs text-slate-400">
+            Writing page {Math.min(progress.done + 1, progress.total)} of {progress.total}… each page takes about a
+            minute. You can leave this tab open; pages appear below as they are saved.
+          </p>
+        ) : null}
         {lastRun ? (
           <div className="mt-3 text-xs text-slate-400">
             Created {lastRun.created.length} · refused {lastRun.rejected.length} · skipped {lastRun.skipped.length}

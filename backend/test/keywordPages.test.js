@@ -4,9 +4,14 @@ import assert from 'node:assert/strict';
 import prisma from '../src/database/client.js';
 import {
   MAX_PAGES_PER_REQUEST,
+  MIN_BODY_WORDS,
+  countBodyWords,
   SIMILARITY_LIMIT,
   generateKeywordPages,
+  getKeywordJob,
   parseKeywords,
+  startKeywordGeneration,
+  waitForKeywordJob,
 } from '../src/services/keywordPage.service.js';
 import { contentToText, textSimilarity } from '../src/services/textSimilarity.js';
 
@@ -132,15 +137,38 @@ describe('generateKeywordPages', () => {
     let calls = 0;
     const templateWriter = async () => {
       calls += 1;
-      const p = 'We provide reliable pet boarding with daily walks, play time, clean suites and caring staff for every guest.';
+      const p = Array(6).fill('We provide reliable pet boarding with daily walks, play time, clean suites and caring staff for every guest.').join(' ');
       return { h1: 'Pet boarding', intro: p, sections: [1, 2, 3, 4].map(() => ({ heading: 'Why us', paragraphs: [p, p] })), faqs: [{ question: 'Why?', answer: p }] };
     };
     const result = await generateKeywordPages('site-1', { keywords: 'dog boarding', locationPageIds: ['c1', 'c2'] }, { generateFn: templateWriter });
     assert.equal(result.created.length, 1, 'first page is fine');
     assert.equal(result.rejected.length, 1, 'the second, identical page is refused');
     assert.match(result.rejected[0].reason, /too similar/);
-    assert.equal(calls, 3, 'one call for page 1, two attempts for page 2');
+    assert.equal(calls, 4, 'one call for page 1, three attempts for page 2');
     assert.equal(store.length, 1);
+  });
+
+  it(`retries short drafts and refuses pages under ${MIN_BODY_WORDS} words`, async () => {
+    const prompts = [];
+    const shortWriter = async (prompt) => {
+      prompts.push(prompt);
+      const writer = uniqueWriter();
+      const full = await writer(prompt + prompts.length);
+      // Every paragraph cut to 20 words: far below the minimum.
+      return { ...full, intro: full.intro.split(' ').slice(0, 20).join(' '), sections: full.sections.map((s) => ({ ...s, paragraphs: s.paragraphs.map((p) => p.split(' ').slice(0, 20).join(' ')) })) };
+    };
+    const result = await generateKeywordPages('site-1', { keywords: 'dog boarding', locationPageIds: ['c1'] }, { generateFn: shortWriter });
+    assert.equal(result.created.length, 0);
+    assert.match(result.rejected[0].reason, /too short/);
+    assert.equal(prompts.length, 3);
+    assert.match(prompts[1], /previous draft body was only \d+ words/);
+    assert.equal(store.length, 0);
+  });
+
+  it('counts body words from intro, section paragraphs and FAQ answers only', () => {
+    const c = { h1: 'one two', intro: 'a b c', sections: [{ heading: 'x y', paragraphs: ['d e', 'f'] }], localNotes: ['n n n'], faqs: [{ question: 'q q', answer: 'g h' }] };
+    assert.equal(countBodyWords(c), 8);
+    assert.equal(countBodyWords(JSON.stringify(c)), 8);
   });
 
   it('skips pages that already exist', async () => {
@@ -148,5 +176,42 @@ describe('generateKeywordPages', () => {
     const result = await generateKeywordPages('site-1', { keywords: 'dog boarding', locationPageIds: ['c1', 'c2'] }, { generateFn: uniqueWriter() });
     assert.deepEqual(result.skipped.map((s) => s.slug), ['dog-boarding-englewood']);
     assert.deepEqual(result.created.map((p) => p.slug), ['dog-boarding-lakewood']);
+  });
+});
+
+describe('background generation jobs', () => {
+  beforeEach(() => stubPrisma());
+
+  it('validates before starting: bad input fails immediately with no AI call', async () => {
+    let calls = 0;
+    await assert.rejects(
+      startKeywordGeneration('site-1', { keywords: 'a1,a2,a3,a4,a5,a6', locationPageIds: ['c1', 'c2'] }, { generateFn: async () => { calls += 1; return {}; } }),
+      (e) => e.code === 'TOO_MANY_PAGES',
+    );
+    assert.equal(calls, 0);
+  });
+
+  it('runs in the background, reports progress and the result, and blocks a second run on the same site', async () => {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const writer = uniqueWriter();
+    const job = await startKeywordGeneration(
+      'site-1',
+      { keywords: 'dog boarding', locationPageIds: ['c1', 'c2'] },
+      { generateFn: async (p) => { await gate; return writer(p); } },
+    );
+    assert.equal(job.status, 'running');
+    assert.equal(job.total, 2);
+    await assert.rejects(
+      startKeywordGeneration('site-1', { keywords: 'cat boarding', locationPageIds: ['c1'] }, { generateFn: writer }),
+      (e) => e.status === 409 || e.statusCode === 409 || e.code === 'KEYWORD_JOB_RUNNING',
+    );
+    release();
+    await waitForKeywordJob(job.id);
+    const finished = getKeywordJob('site-1', job.id);
+    assert.equal(finished.status, 'done');
+    assert.equal(finished.done, 2);
+    assert.equal(finished.result.created.length, 2);
+    assert.throws(() => getKeywordJob('other-site', job.id), (e) => e.code === 'JOB_NOT_FOUND');
   });
 });

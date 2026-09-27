@@ -38,11 +38,12 @@ import { listContactSubmissions } from '../services/contactSubmission.service.js
 import { deliverLeadToGhl } from '../services/siteLeads.service.js';
 import {
   deleteKeywordPage,
-  generateKeywordPages,
+  getKeywordJob,
   getPublishedKeywordPage,
   listKeywordPages,
   listPublishedKeywordPages,
   setKeywordPagePublished,
+  startKeywordGeneration,
 } from '../services/keywordPage.service.js';
 import {
   createTemplate,
@@ -1481,15 +1482,26 @@ router.get(
   }),
 );
 
-/** Body: { keywords: string | string[], locationPageIds: string[] }. Creates DRAFTs. */
+/**
+ * Body: { keywords: string | string[], locationPageIds: string[] }. Validates, then creates DRAFTs in
+ * the background; poll GET .../keyword-pages/jobs/:jobId for progress and the result.
+ */
 router.post(
   '/sites/:siteId/keyword-pages',
   asyncHandler(async (req, res) => {
-    const result = await generateKeywordPages(req.params.siteId, {
+    const job = await startKeywordGeneration(req.params.siteId, {
       keywords: req.body?.keywords,
       locationPageIds: req.body?.locationPageIds,
     });
-    return res.status(201).json({ success: true, data: result, requestId: req.requestId });
+    return res.status(202).json({ success: true, data: { job }, requestId: req.requestId });
+  }),
+);
+
+router.get(
+  '/sites/:siteId/keyword-pages/jobs/:jobId',
+  asyncHandler(async (req, res) => {
+    const job = getKeywordJob(req.params.siteId, req.params.jobId);
+    return res.json({ success: true, data: { job }, requestId: req.requestId });
   }),
 );
 

@@ -30,6 +30,15 @@ export interface KeywordGenerationResult {
   skipped: Array<{ keyword: string; city: string; slug: string; reason: string }>;
 }
 
+export interface KeywordJob {
+  id: string;
+  status: 'running' | 'done' | 'failed';
+  total: number;
+  done: number;
+  result: KeywordGenerationResult | null;
+  error: string | null;
+}
+
 type Envelope<T> = { data: T };
 
 export async function listKeywordPages(siteId: string): Promise<KeywordPage[]> {
@@ -37,16 +46,18 @@ export async function listKeywordPages(siteId: string): Promise<KeywordPage[]> {
   return data.data.pages;
 }
 
-export async function generateKeywordPages(
+/** Starts a background run; poll getKeywordJob until it is no longer running. */
+export async function startKeywordGeneration(
   siteId: string,
   body: { keywords: string; locationPageIds: string[] },
-): Promise<KeywordGenerationResult> {
-  const { data } = await api.post<Envelope<KeywordGenerationResult>>(
-    `/phase4/sites/${siteId}/keyword-pages`,
-    body,
-    { timeout: 300000 },
-  );
-  return data.data;
+): Promise<KeywordJob> {
+  const { data } = await api.post<Envelope<{ job: KeywordJob }>>(`/phase4/sites/${siteId}/keyword-pages`, body);
+  return data.data.job;
+}
+
+export async function getKeywordJob(siteId: string, jobId: string): Promise<KeywordJob> {
+  const { data } = await api.get<Envelope<{ job: KeywordJob }>>(`/phase4/sites/${siteId}/keyword-pages/jobs/${jobId}`);
+  return data.data.job;
 }
 
 export async function setKeywordPagePublished(siteId: string, id: string, published: boolean): Promise<void> {

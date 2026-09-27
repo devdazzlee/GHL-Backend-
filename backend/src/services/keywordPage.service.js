@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
 import prisma from '../database/client.js';
@@ -11,8 +12,9 @@ import { contentToText, maxSimilarity } from './textSimilarity.js';
  * Uniqueness: every keyword+city pair gets its own angle, the city page's own
  * local facts, and the headings already used on the site to avoid. The result
  * is compared with every other page on the site (city pages, keyword pages,
- * this batch); anything above SIMILARITY_LIMIT is regenerated once and, if it
- * is still too close, rejected instead of saved.
+ * this batch); anything above SIMILARITY_LIMIT, or shorter than MIN_BODY_WORDS,
+ * is regenerated (up to MAX_ATTEMPTS in total) and, if it still fails,
+ * rejected instead of saved.
  */
 
 export const MAX_PAGES_PER_REQUEST = 10;
@@ -20,6 +22,9 @@ export const MAX_PAGES_PER_SITE = 200;
 export const MAX_KEYWORDS_PER_REQUEST = 25;
 /** Jaccard overlap of word 5-grams; a city-swapped template scores ~0.7+. */
 export const SIMILARITY_LIMIT = 0.3;
+/** Intro + section paragraphs + FAQ answers. */
+export const MIN_BODY_WORDS = 850;
+const MAX_ATTEMPTS = 3;
 
 const OPENAI_MODEL = 'gpt-4o';
 
@@ -81,6 +86,20 @@ function trimWords(text, max) {
   return words.length > max ? `${words.slice(0, max).join(' ')}…` : words.join(' ');
 }
 
+const wordCount = (text) => String(text ?? '').split(/\s+/).filter(Boolean).length;
+
+/** Words in the page body: intro, section paragraphs and FAQ answers. */
+export function countBodyWords(content) {
+  const c = parseJson(content);
+  const sections = Array.isArray(c.sections) ? c.sections : [];
+  const faqs = Array.isArray(c.faqs) ? c.faqs : [];
+  return (
+    wordCount(c.intro) +
+    sections.flatMap((s) => (Array.isArray(s?.paragraphs) ? s.paragraphs : [])).reduce((n, p) => n + wordCount(p), 0) +
+    faqs.reduce((n, f) => n + wordCount(f?.answer), 0)
+  );
+}
+
 function headingsOf(content) {
   const c = parseJson(content);
   return [c.h1, ...(Array.isArray(c.sections) ? c.sections.map((s) => s?.heading) : [])].filter(Boolean);
@@ -102,12 +121,12 @@ export function buildKeywordPagePrompt({ site, city, keyword, angle, services, a
     'Rules: genuinely useful, specific writing for someone searching this in this town. No keyword stuffing, no filler, no generic text that would fit any city.',
     'Never invent prices, statistics, awards, licenses, certifications, years in business, customer counts or reviews. Only use local details from the facts above or well-known public facts about the town.',
     `The business is based in ${site.city}, ${site.state}. Do not say or imply it has an office, shop or location in or near ${city.city} (no "our facility near ${city.city}"); say it is based in ${site.city} and serves ${city.city}.`,
-    'Length matters: the page body (intro + sections + FAQ answers) must total at least 850 words. Each section needs three full paragraphs.',
+    `Length matters: the page body (intro + sections + FAQ answers) must total at least ${MIN_BODY_WORDS + 150} words. Each of the 5 sections needs three full paragraphs of about 100 words; short or one-line paragraphs are not acceptable.`,
     'Return ONLY valid JSON with this exact shape:',
     '{ "seo": { "title": "50-60 characters with the keyword and town", "metaDescription": "120-155 characters" },',
     '  "h1": "max 12 words, includes keyword and town",',
     '  "intro": "120-160 words",',
-    '  "sections": [ { "heading": "max 9 words", "paragraphs": ["80-120 words", "80-120 words", "80-120 words"] }, 4 sections in total ],',
+    '  "sections": [ { "heading": "max 9 words", "paragraphs": ["80-120 words", "80-120 words", "80-120 words"] }, 5 sections in total ],',
     '  "localNotes": ["3 short points tied to this town, max 30 words each"],',
     '  "faqs": [ { "question": "...", "answer": "50-80 words" }, 4 FAQs in total ],',
     '  "ctaHeading": "max 8 words", "ctaText": "30-50 words" }',
@@ -124,7 +143,7 @@ export async function generateWithOpenAi(prompt) {
   const completion = await client.chat.completions.create({
     model: OPENAI_MODEL,
     temperature: 0.8,
-    max_tokens: 3500,
+    max_tokens: 5000,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: 'You are a careful local-business copywriter. Always return valid JSON only.' },
@@ -144,11 +163,8 @@ function isUsable(content) {
   );
 }
 
-/**
- * Generates DRAFT keyword pages for keyword × city pairs.
- * @returns {{ created: object[], rejected: object[], skipped: object[] }}
- */
-export async function generateKeywordPages(siteId, { keywords, locationPageIds }, { generateFn = generateWithOpenAi } = {}) {
+/** Validates a request and gathers everything the run needs. Throws 4xx before any AI call. */
+export async function planKeywordPages(siteId, { keywords, locationPageIds }) {
   const site = await prisma.generatedSite.findUnique({ where: { id: siteId } });
   if (!site) throw new AppError('Generated site not found.', 404, { code: 'SITE_NOT_FOUND' });
 
@@ -188,14 +204,24 @@ export async function generateKeywordPages(siteId, { keywords, locationPageIds }
   const avoidHeadings = existing.flatMap((p) => headingsOf(p.content));
   const services = (parseJson(site.servicesContent).services ?? []).map((s) => s?.title).filter(Boolean).slice(0, 10);
 
+  return { site, siteId, pairs, existingSlugs, corpus, avoidHeadings, services, angleIndex: existing.length };
+}
+
+/**
+ * Writes, checks and saves the planned pages as DRAFTs.
+ * @returns {{ created: object[], rejected: object[], skipped: object[] }}
+ */
+export async function runKeywordPlan(plan, { generateFn = generateWithOpenAi, onProgress = () => {} } = {}) {
+  const { site, siteId, pairs, existingSlugs, corpus, avoidHeadings, services } = plan;
   const created = [];
   const rejected = [];
   const skipped = [];
-  let angleIndex = existing.length;
+  let { angleIndex } = plan;
 
   for (const pair of pairs) {
     if (existingSlugs.has(pair.slug)) {
       skipped.push({ keyword: pair.keyword, city: pair.city.city, slug: pair.slug, reason: 'already exists' });
+      onProgress();
       continue;
     }
     const angle = ANGLES[angleIndex % ANGLES.length];
@@ -203,28 +229,44 @@ export async function generateKeywordPages(siteId, { keywords, locationPageIds }
 
     let content = null;
     let score = { max: 0, key: null };
+    let last = null;
     let retryNote = null;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const prompt = buildKeywordPagePrompt({ site, city: pair.city, keyword: pair.keyword, angle, services, avoidHeadings, retryNote });
       const candidate = await generateFn(prompt);
       if (!isUsable(candidate)) {
         retryNote = 'The previous answer was missing required fields. Follow the JSON shape exactly.';
         continue;
       }
-      score = maxSimilarity(contentToText(candidate), corpus);
-      content = candidate;
-      if (score.max <= SIMILARITY_LIMIT) break;
-      retryNote = `The previous draft repeated too much wording from another page on this site (${score.key}). Write it again with different structure, examples and phrasing.`;
+      const candidateScore = maxSimilarity(contentToText(candidate), corpus);
+      const words = countBodyWords(candidate);
+      if (candidateScore.max <= SIMILARITY_LIMIT && words >= MIN_BODY_WORDS) {
+        content = candidate;
+        score = candidateScore;
+        break;
+      }
+      last = { score: candidateScore, words };
+      retryNote =
+        candidateScore.max > SIMILARITY_LIMIT
+          ? `The previous draft repeated too much wording from another page on this site (${candidateScore.key}). Write it again with different structure, examples and phrasing.`
+          : `The previous draft body was only ${words} words; it must be at least ${MIN_BODY_WORDS + 150}. Write all 5 sections with three full paragraphs each.`;
     }
 
-    if (!content || score.max > SIMILARITY_LIMIT) {
+    if (!content) {
+      let reason = 'generation failed';
+      if (last?.score.max > SIMILARITY_LIMIT) {
+        reason = `too similar to ${last.score.key} (${Math.round(last.score.max * 100)}% overlap)`;
+      } else if (last) {
+        reason = `too short (${last.words} words; minimum ${MIN_BODY_WORDS})`;
+      }
       rejected.push({
         keyword: pair.keyword,
         city: pair.city.city,
         slug: pair.slug,
-        reason: content ? `too similar to ${score.key} (${Math.round(score.max * 100)}% overlap)` : 'generation failed',
-        maxSimilarity: content ? score.max : null,
+        reason,
+        maxSimilarity: last ? last.score.max : null,
       });
+      onProgress();
       continue;
     }
 
@@ -244,9 +286,73 @@ export async function generateKeywordPages(siteId, { keywords, locationPageIds }
     existingSlugs.add(pair.slug);
     corpus.push({ key: `keyword:${pair.slug}`, text: contentToText(content) });
     avoidHeadings.push(...headingsOf(content));
+    onProgress();
   }
 
   return { created, rejected, skipped };
+}
+
+/** Plan + run in one call (used by tests and scripts). */
+export async function generateKeywordPages(siteId, body, options) {
+  return runKeywordPlan(await planKeywordPages(siteId, body), options);
+}
+
+// ---- Background jobs: a 10-page run takes several minutes, longer than an HTTP request should. ----
+// In memory: the backend runs as one process. A restart loses the job status, not the pages already saved.
+
+const JOB_RETENTION_MS = 60 * 60 * 1000;
+const jobs = new Map();
+
+function publicJob(job) {
+  const { id, siteId, status, total, done, result, error, startedAt, finishedAt } = job;
+  return { id, siteId, status, total, done, result, error, startedAt, finishedAt };
+}
+
+function pruneJobs(now = Date.now()) {
+  for (const [id, job] of jobs) {
+    if (job.finishedAt && now - job.finishedAt > JOB_RETENTION_MS) jobs.delete(id);
+  }
+}
+
+/** Validates now (4xx errors are thrown to the caller), then generates in the background. */
+export async function startKeywordGeneration(siteId, body, options = {}) {
+  pruneJobs();
+  const plan = await planKeywordPages(siteId, body);
+  // Checked after the await so two overlapping requests cannot both start.
+  if ([...jobs.values()].some((j) => j.siteId === siteId && j.status === 'running')) {
+    throw new AppError('Keyword pages are already being generated for this site. Wait for that run to finish.', 409, {
+      code: 'KEYWORD_JOB_RUNNING',
+    });
+  }
+  const job = { id: randomUUID(), siteId, status: 'running', total: plan.pairs.length, done: 0, result: null, error: null, startedAt: new Date().toISOString(), finishedAt: null };
+  jobs.set(job.id, job);
+  job.promise = runKeywordPlan(plan, { ...options, onProgress: () => { job.done += 1; } })
+    .then(
+      (result) => {
+        job.status = 'done';
+        job.result = result;
+      },
+      (err) => {
+        job.status = 'failed';
+        job.error = err instanceof Error ? err.message : 'Generation failed';
+        console.error('[keyword-pages] generation job failed', { siteId, jobId: job.id, error: job.error });
+      },
+    )
+    .finally(() => {
+      job.finishedAt = Date.now();
+    });
+  return publicJob(job);
+}
+
+export function getKeywordJob(siteId, jobId) {
+  const job = jobs.get(jobId);
+  if (!job || job.siteId !== siteId) throw new AppError('Generation job not found.', 404, { code: 'JOB_NOT_FOUND' });
+  return publicJob(job);
+}
+
+/** Tests only: wait for a job to finish. */
+export function waitForKeywordJob(jobId) {
+  return jobs.get(jobId)?.promise ?? Promise.resolve();
 }
 
 export async function listKeywordPages(siteId) {
