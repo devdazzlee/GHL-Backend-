@@ -272,6 +272,7 @@ model GeneratedSite {
   leadLocationId  String?
   leadLocation    Location?      @relation("SiteLeadLocation", fields: [leadLocationId], references: [id], onDelete: SetNull)
   locationPages   LocationPage[]
+  keywordPages    KeywordPage[]
   contactSubmissions ContactSubmission[]
   servicePages    ServicePage[]
   createdAt       DateTime       @default(now())
@@ -302,8 +303,35 @@ model LocationPage {
   content   String?
   imageUrl  String?
   createdAt DateTime      @default(now())
+  keywordPages KeywordPage[]
 
   @@unique([siteId, slug])
+}
+
+/// On-request keyword + city landing pages (never part of the automatic build).
+/// Generated as DRAFT, previewed, then published from the dashboard.
+model KeywordPage {
+  id             String        @id @default(cuid())
+  siteId         String
+  site           GeneratedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  locationPageId String
+  locationPage   LocationPage  @relation(fields: [locationPageId], references: [id], onDelete: Cascade)
+  keyword        String
+  /// URL segment under /{siteSlug}/k/{slug}
+  slug           String
+  /// DRAFT | PUBLISHED
+  status         String        @default("DRAFT")
+  /// Generated JSON content
+  content        String        @db.Text
+  /// Highest text overlap (0-1) with any other page on the site when created
+  maxSimilarity  Float?
+  similarTo      String?
+  createdAt      DateTime      @default(now())
+  publishedAt    DateTime?
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+  @@index([locationPageId])
 }
 
 model ContactSubmission {
