@@ -49,11 +49,12 @@ import {
 } from '../components/ui/select';
 import { CardListSkeleton } from '../components/ui/skeleton';
 import { SITE_BASE_URL } from '../config/config';
+import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../utils/format';
 import { DESIGN_CATALOG, DESIGN_VARIANT_COUNT, getDesignCatalogItem } from '../data/designCatalog';
 
-type SiteTab = 'home' | 'about' | 'services' | 'contact' | 'blog' | 'locations' | 'contacts';
+type SiteTab = 'home' | 'about' | 'services' | 'contact' | 'blog' | 'locations' | 'keywords' | 'contacts';
 type EditTab = 'business' | 'colors' | 'regenerate' | 'status';
 
 const SITE_URL = SITE_BASE_URL.replace(/\/$/, '');
@@ -968,6 +969,7 @@ export function GeneratedSitesPage() {
           { id: 'contact', label: 'Contact', content: selectedSite.contactContent },
           { id: 'blog', label: 'Blog', content: selectedSite.blogContent },
           { id: 'locations', label: 'Location Pages', content: null },
+          { id: 'keywords', label: 'Keyword Pages', content: null },
           { id: 'contacts', label: 'Contacts', content: null },
         ]
       : [];
@@ -1265,6 +1267,18 @@ export function GeneratedSitesPage() {
                     </div>
                   )}
                 </div>
+              ) : activeTab === 'keywords' ? (
+                <KeywordPagesPanel
+                  key={selectedSite.id}
+                  siteId={selectedSite.id}
+                  siteSlug={selectedSite.slug}
+                  siteBaseUrl={SITE_URL}
+                  cities={(selectedSite.locationPages ?? []).map((p: Phase4LocationPage) => ({
+                    id: p.id,
+                    city: p.city,
+                    county: p.county,
+                  }))}
+                />
               ) : activeTab === 'contacts' ? (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-400">

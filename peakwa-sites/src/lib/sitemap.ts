@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { SITE_BASE_URL } from '@/src/config';
-import { getLocationPages } from '@/src/lib/api';
+import { getLocationPages, getPublishedKeywordPages } from '@/src/lib/api';
 import { parseJson, type BlogContent, type ServicesContent } from '@/src/lib/content';
 import type { GeneratedSite } from '@/src/lib/types';
 
@@ -61,6 +61,15 @@ export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<Meta
         lastModified,
         changeFrequency: 'monthly',
         priority: 0.85,
+      });
+    }
+    // Published keyword pages; this whole list is only served for indexable sites.
+    for (const keywordPage of await getPublishedKeywordPages(site.slug)) {
+      entries.push({
+        url: `${baseUrl}/k/${keywordPage.slug}`,
+        lastModified: keywordPage.publishedAt ? new Date(keywordPage.publishedAt) : lastModified,
+        changeFrequency: 'monthly',
+        priority: 0.7,
       });
     }
   } catch (error) {
