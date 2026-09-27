@@ -36,6 +36,9 @@ export type GeneratedSite = {
   facebookUrl?: string | null;
   instagramUrl?: string | null;
   websiteUrl?: string | null;
+  logoUrl?: string | null;
+  /** Only true when switched on in the dashboard; otherwise noindex. */
+  searchIndexable?: boolean | null;
 };
 
 export type LocationPage = {

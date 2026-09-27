@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from '../config/config';
+import { ADMIN_KEY_REQUIRED_EVENT, clearAdminKey, getAdminKey } from '../lib/adminKey';
 
 export interface ApiErrorBody {
   success?: boolean;
@@ -19,6 +20,10 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
+    }
+    const adminKey = getAdminKey();
+    if (adminKey) {
+      config.headers.Authorization = `Bearer ${adminKey}`;
     }
     return config;
   },
@@ -41,6 +46,11 @@ api.interceptors.response.use(
           'Request timed out. Long-running jobs like the daily publisher can take 1-3 minutes. Try again or check the server logs.',
         ),
       );
+    }
+    const code = error.response?.data?.error?.code;
+    if (error.response?.status === 401 && (code === 'AUTH_REQUIRED' || code === 'AUTH_INVALID')) {
+      clearAdminKey();
+      window.dispatchEvent(new Event(ADMIN_KEY_REQUIRED_EVENT));
     }
     const message =
       error.response?.data?.error?.message ??

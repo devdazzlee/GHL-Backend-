@@ -392,6 +392,10 @@ export interface Phase4GeneratedSite {
   contactContent: string | null;
   blogContent: string | null;
   status: SiteStatus;
+  /** Search engines may index the site only when true (default: noindex). */
+  searchIndexable?: boolean | null;
+  /** Location.id that receives this site's leads; null = leads are held. */
+  leadLocationId?: string | null;
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -448,6 +452,10 @@ export interface Phase4SiteUpdatePayload {
   customersServed?: string | null;
   projectsCompleted?: string | null;
   status?: SiteStatus;
+  searchIndexable?: boolean;
+  leadLocationId?: string | null;
+  /** Also rewrite page text with AI when name/industry/city change. */
+  regenerateContent?: boolean;
 }
 
 export async function fetchPhase4TemplatesPaginated(
@@ -560,6 +568,16 @@ export async function createPhase4Site(
   return data.data.site;
 }
 
+/** Dashboard test generation: admin key required (spends AI credits). */
+export async function createPhase4SiteAsAdmin(
+  payload: Phase4SitePayload,
+): Promise<Phase4GeneratedSite> {
+  const { data } = await api.post<
+    ApiResponse<{ slug: string; site: Phase4GeneratedSite }>
+  >('/phase4/admin/generate-site', payload, { timeout: 300000 });
+  return data.data.site;
+}
+
 export async function addLocationPages(
   siteId: string,
   locations: Phase4LocationInput[],
@@ -582,6 +600,27 @@ export async function addLocationPagesByRadius(
     { timeout: 300000 },
   );
   return data.data.pages;
+}
+
+export interface RadiusTown {
+  city: string;
+  county: string;
+  state: string;
+  miles: number;
+  zips: string[];
+  hasPage: boolean;
+  isBusinessCity: boolean;
+}
+
+/** Real towns within a ZIP radius (no generation). */
+export async function previewRadiusTowns(
+  siteId: string,
+  params: { zipCode: string; radiusMiles: number },
+): Promise<{ origin: { zip: string; city: string; county: string; state: string }; towns: RadiusTown[] }> {
+  const { data } = await api.get<
+    ApiResponse<{ origin: { zip: string; city: string; county: string; state: string }; towns: RadiusTown[] }>
+  >(`/phase4/sites/${siteId}/location-pages/radius-preview`, { params });
+  return data.data;
 }
 
 export async function deletePhase4Site(id: string): Promise<{ message: string; siteId: string }> {
@@ -677,10 +716,24 @@ export interface ContactSubmission {
   phone: string | null;
   message: string;
   createdAt: string;
+  /** SENT | HELD_NO_LOCATION | HELD_NO_KEY | FAILED | SKIPPED_MOCK (null for older leads). */
+  ghlStatus?: string | null;
+  ghlLocationId?: string | null;
+  ghlError?: string | null;
   site?: {
     businessName: string;
     slug: string;
   };
+}
+
+/** Sends a held or failed lead to the GHL location now mapped to its site. */
+export async function sendContactToGhl(
+  id: string,
+): Promise<{ ghlStatus: string; ghlError?: string | null }> {
+  const { data } = await api.post<ApiResponse<{ ghlStatus: string; ghlError?: string | null }>>(
+    `/phase4/contacts/${id}/send-to-ghl`,
+  );
+  return data.data;
 }
 
 export async function fetchIndustrySchemasPaginated(

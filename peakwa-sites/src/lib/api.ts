@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config/config';
+import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { ALL_SITES_CACHE_TAG, siteCacheTag } from '@/src/lib/siteCache';
 import type { GeneratedSite, LocationPage } from './types';
 
@@ -9,11 +10,12 @@ type FetchCacheOptions = {
 };
 
 function fetchInit(cache: FetchCacheOptions): RequestInit {
+  const headers = rendererHeaders();
   if (!IS_SEARCH_INDEXABLE) {
-    return { cache: 'no-store' };
+    return { cache: 'no-store', headers };
   }
 
-  return { next: cache };
+  return { next: cache, headers };
 }
 
 const MAX_FETCH_ATTEMPTS = 3;

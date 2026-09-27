@@ -9,14 +9,13 @@
  *     unset + production URL → indexable
  *     unset + localhost + `next dev` → indexable (SEO parity while developing)
  *     unset + localhost + `next start` → not indexable
- *   REVALIDATE_SECRET (optional override)
+ *   REVALIDATE_SECRET (required for /api/revalidate; same value as the backend)
+ *   SITE_RENDERER_API_KEY (server-only; same value as the backend)
  */
 import {
   LOCAL_API_URL,
-  LOCAL_REVALIDATE_SECRET,
   LOCAL_SITE_BASE_URL,
   PRODUCTION_API_URL,
-  PRODUCTION_REVALIDATE_SECRET,
   PRODUCTION_SITE_BASE_URL,
 } from './defaults';
 
@@ -48,9 +47,8 @@ export const API_URL = stripTrailingSlash(
   envApiUrl || (IS_PRODUCTION ? PRODUCTION_API_URL : LOCAL_API_URL),
 );
 
-export const REVALIDATE_SECRET =
-  envRevalidateSecret ||
-  (IS_PRODUCTION ? PRODUCTION_REVALIDATE_SECRET : LOCAL_REVALIDATE_SECRET);
+/** From the REVALIDATE_SECRET env var only; empty means cache purges are refused. */
+export const REVALIDATE_SECRET = envRevalidateSecret ?? '';
 
 export const IS_SEARCH_INDEXABLE =
   envIndexing === 'true'

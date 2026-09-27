@@ -3,6 +3,8 @@ import { Loader2, ExternalLink, MapPin, Minus, Pencil, Plus, RefreshCw, Search, 
 import {
   addLocationPages,
   addLocationPagesByRadius,
+  previewRadiusTowns,
+  type RadiusTown,
   addPhase4Service,
   deletePhase4Service,
   deletePhase4Site,
@@ -30,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { Button } from '../components/ui/button';
+import { useLocations } from '../contexts/LocationsContext';
 import {
   Dialog,
   DialogContent,
@@ -475,6 +478,26 @@ export function GeneratedSitesPage() {
   const [locationRows, setLocationRows] = useState<Phase4LocationInput[]>([emptyLocationRow()]);
   const [radiusZip, setRadiusZip] = useState('');
   const [radiusMiles, setRadiusMiles] = useState('15');
+  const [radiusPreview, setRadiusPreview] = useState<RadiusTown[] | null>(null);
+  const [previewingTowns, setPreviewingTowns] = useState(false);
+
+  async function handlePreviewTowns() {
+    if (!selectedSite) return;
+    setPreviewingTowns(true);
+    setError(null);
+    try {
+      const { towns } = await previewRadiusTowns(selectedSite.id, {
+        zipCode: radiusZip.trim(),
+        radiusMiles: Number(radiusMiles),
+      });
+      setRadiusPreview(towns);
+    } catch (err) {
+      setRadiusPreview(null);
+      setError(err instanceof Error ? err.message : 'Failed to preview towns');
+    } finally {
+      setPreviewingTowns(false);
+    }
+  }
   const [addingLocations, setAddingLocations] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Phase4GeneratedSite | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -483,6 +506,7 @@ export function GeneratedSitesPage() {
   const [editTarget, setEditTarget] = useState<SiteWithTheme | null>(null);
   const [editTab, setEditTab] = useState<EditTab>('business');
   const [editData, setEditData] = useState<Record<string, string>>({});
+  const { locations: ghlLocations } = useLocations();
   const [savingBusiness, setSavingBusiness] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
@@ -518,6 +542,8 @@ export function GeneratedSitesPage() {
       projectsCompleted: siteData.projectsCompleted || '',
       logoUrl: siteData.logoUrl || '',
       status: siteData.status || 'ACTIVE',
+      searchIndexable: siteData.searchIndexable === true ? 'true' : 'false',
+      leadLocationId: siteData.leadLocationId ?? '',
     });
   }
 
@@ -648,11 +674,30 @@ export function GeneratedSitesPage() {
     e.preventDefault();
     if (!editTarget || savingBusiness) return;
 
+    const identityChanged =
+      (editData.businessName?.trim() ?? '') !== (editTarget.businessName ?? '') ||
+      (editData.industry?.trim() ?? '') !== (editTarget.industry ?? '') ||
+      (editData.city?.trim() ?? '') !== (editTarget.city ?? '');
+    // Rewriting the site is never a side effect: ask. The URL stays the same either way.
+    const regenerateContent =
+      identityChanged &&
+      window.confirm(
+        [
+          'Business name, industry or city changed.',
+          '',
+          'OK = also rewrite ALL page text with AI (replaces current text and colours; paid AI call).',
+          'Cancel = save the new details only (page text keeps the old wording).',
+          '',
+          'The site URL stays the same either way.',
+        ].join('\n'),
+      );
+
     setSavingBusiness(true);
     setError(null);
     setEditSuccess(null);
     try {
       const updated = await updatePhase4Site(editTarget.id, {
+        regenerateContent,
         businessName: editData.businessName?.trim() ?? '',
         industry: editData.industry?.trim() ?? '',
         phone: editData.phone?.trim() || null,
@@ -715,6 +760,8 @@ export function GeneratedSitesPage() {
     try {
       const updated = await updatePhase4Site(editTarget.id, {
         status: (editData.status || 'ACTIVE') as SiteStatus,
+        searchIndexable: editData.searchIndexable === 'true',
+        leadLocationId: editData.leadLocationId || null,
       });
       await refreshAfterEdit(updated, 'Status updated.');
     } catch (err) {
@@ -726,6 +773,13 @@ export function GeneratedSitesPage() {
 
   async function handleRegenerateSite() {
     if (!editTarget || regenerating) return;
+    if (
+      !window.confirm(
+        'Rewrite ALL page text, the blog and the colours for this site with AI? This replaces the current content and uses paid AI calls. The URL stays the same.',
+      )
+    ) {
+      return;
+    }
 
     setRegenerating(true);
     setError(null);
@@ -1826,6 +1880,50 @@ export function GeneratedSitesPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                      Lead destination (GHL location)
+                    </label>
+                    <select
+                      value={editData.leadLocationId ?? ''}
+                      onChange={(e) =>
+                        setEditData((prev) => ({ ...prev, leadLocationId: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    >
+                      <option value="">Not mapped: keep leads in Peakwa and flag them</option>
+                      {ghlLocations.map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.businessName} ({loc.ghlLocationId})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Contact-form leads from this site go only to this location.
+                    </p>
+                  </div>
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-800 p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={editData.searchIndexable === 'true'}
+                      onChange={(e) =>
+                        setEditData((prev) => ({
+                          ...prev,
+                          searchIndexable: e.target.checked ? 'true' : 'false',
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block font-medium text-white">
+                        Allow search engines to index this site
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        Off by default: every page is noindex and left out of sitemaps. Turn on
+                        only for a real business whose site is moving to its own domain.
+                      </span>
+                    </span>
+                  </label>
                   <div className="flex justify-end">
                     <Button type="submit" disabled={savingStatus}>
                       {savingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -1899,6 +1997,36 @@ export function GeneratedSitesPage() {
                     className={inputClass}
                     placeholder="15"
                   />
+                </div>
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={previewingTowns || !radiusZip.trim()}
+                    onClick={() => void handlePreviewTowns()}
+                  >
+                    {previewingTowns ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Preview towns
+                  </Button>
+                  {radiusPreview ? (
+                    <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-800 p-2 text-xs">
+                      <p className="mb-2 text-slate-400">
+                        {radiusPreview.length} real towns in range (ZIP data, nearest first).
+                        Generating adds up to 8 new pages per run; towns that already have a page are skipped.
+                      </p>
+                      {radiusPreview.map((t) => (
+                        <div key={`${t.city}-${t.county}-${t.state}`} className="flex justify-between gap-2 py-0.5">
+                          <span className="text-slate-200">
+                            {t.city}, {t.county} County, {t.state}
+                          </span>
+                          <span className="shrink-0 text-slate-500">
+                            {t.miles} mi{t.hasPage ? ' · has page' : ''}{t.isBusinessCity ? ' · business city' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (

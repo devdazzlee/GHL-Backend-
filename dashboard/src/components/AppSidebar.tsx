@@ -5,13 +5,13 @@ import {
   Database,
   Globe,
   Image,
-  Layout,
   LayoutDashboard,
   Mail,
   Palette,
   PlayCircle,
   Settings2,
   Share2,
+  Send,
   SlidersHorizontal,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
@@ -30,11 +30,11 @@ const navItems = [
 ];
 
 const phase4NavItems = [
-  { to: '/templates', label: 'Templates', icon: Layout },
   { to: '/designs', label: 'Designs', icon: Palette },
   { to: '/sites', label: 'Generated Sites', icon: Globe },
   { to: '/industry-schemas', label: 'Industry Schemas', icon: Database },
   { to: '/contacts', label: 'Contact Submissions', icon: Mail },
+  { to: '/form-test', label: 'Generate Site (Admin)', icon: Send },
 ];
 
 function navClass(isActive: boolean) {
