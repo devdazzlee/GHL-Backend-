@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { Mail, MapPin, Phone } from 'lucide-react';
+import { ChevronRight, Mail, MapPin, Phone } from 'lucide-react';
 import clsx from 'clsx';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
-import { FOOTER_LINK_LIMIT, type FooterLink } from '@/src/lib/footerLinks';
-import { getMutedTextOnBackground, getTextColor } from '@/src/lib/theme';
+import { FOOTER_LINK_LIMIT, footerLinkColor, type FooterLink } from '@/src/lib/footerLinks';
+import { contrastRatio, getMutedTextOnBackground, getTextColor } from '@/src/lib/theme';
 import type { FooterStyle } from '@/src/designs/presets';
 import { resolveDesignPreset } from '@/src/designs/presets';
 
@@ -135,56 +135,76 @@ function IconBadge({
   );
 }
 
-function FooterLinkColumn({
+type LinkStyle = { text: string; underline: string };
+
+/** One clickable footer link: accent-tinted text, accent underline, chevron. */
+function FooterLink({ link, style, bold = false }: { link: FooterLink; style: LinkStyle; bold?: boolean }) {
+  return (
+    <Link
+      href={link.href}
+      className={clsx(
+        'group inline-flex items-center gap-1.5 underline decoration-2 underline-offset-4 transition',
+        'hover:decoration-[3px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        bold ? 'font-semibold' : 'font-medium',
+      )}
+      style={{ color: style.text, textDecorationColor: style.underline, outlineColor: style.underline }}
+    >
+      {/* Chevron and underline always use the raw accent (decorative), so links stand out even
+          where the readable text color has to stay close to the label color. */}
+      <ChevronRight
+        className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
+        strokeWidth={2.5}
+        style={{ color: style.underline }}
+        aria-hidden
+      />
+      <span>{link.label}</span>
+    </Link>
+  );
+}
+
+/** A labelled list of footer links (Quick Links, Our Services, Service Areas). */
+function FooterLinkList({
   title,
   links,
-  more,
-  color,
+  more = null,
+  labelColor,
+  linkStyle,
+  columns = 1,
+  centered = false,
 }: {
   title: string;
   links: FooterLink[];
-  more: FooterLink | null;
-  color: string;
+  more?: FooterLink | null;
+  labelColor: string;
+  linkStyle: LinkStyle;
+  columns?: 1 | 2;
+  centered?: boolean;
 }) {
+  if (links.length === 0) return null;
   return (
-    <div>
-      <p className="mb-4 text-sm font-semibold uppercase tracking-wide" style={{ color }}>
+    <nav aria-label={title} className={clsx(centered && 'text-center')}>
+      <p className="mb-4 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: labelColor }}>
         {title}
       </p>
-      <ul className="space-y-2.5 text-sm">
+      <ul
+        className={clsx(
+          'text-sm',
+          columns === 2 ? 'grid grid-cols-2 gap-x-6 gap-y-2.5' : 'space-y-2.5',
+          centered && 'justify-items-center',
+        )}
+      >
         {links.map((link) => (
           <li key={link.href}>
-            <Link href={link.href} className="transition hover:opacity-90" style={{ color }}>
-              {link.label}
-            </Link>
+            <FooterLink link={link} style={linkStyle} />
           </li>
         ))}
         {more ? (
           <li>
-            <Link href={more.href} className="font-semibold underline underline-offset-2" style={{ color }}>
-              {more.label}
-            </Link>
+            <FooterLink link={more} style={linkStyle} bold />
           </li>
         ) : null}
       </ul>
-    </div>
-  );
-}
-
-function FooterLinkRow({ title, links, color, centered = false }: { title: string; links: FooterLink[]; color: string; centered?: boolean }) {
-  if (links.length === 0) return null;
-  return (
-    <p className={clsx('mt-3 text-sm', centered && 'text-center')} style={{ color }}>
-      <span className="font-semibold">{title}: </span>
-      {links.map((link, i) => (
-        <span key={link.href}>
-          {i > 0 ? ' · ' : null}
-          <Link href={link.href} className="transition hover:opacity-90" style={{ color }}>
-            {link.label}
-          </Link>
-        </span>
-      ))}
-    </p>
+    </nav>
   );
 }
 
@@ -212,6 +232,16 @@ export function Footer({ site, theme, footerStyle, services = [], areas = [] }: 
   const accentText = getTextColor(theme.accentColor);
   const base = `/${site.slug}`;
   const socialLinks = buildSocialLinks(site);
+  // Links use the site's accent color (tinted only if needed to be readable) with an
+  // accent underline, so they never look like the surrounding label text.
+  const linkStyle: LinkStyle = {
+    text: footerLinkColor(theme.accentColor, theme.primaryColor, contrastRatio),
+    underline: theme.accentColor,
+  };
+  const serviceLinks = services.slice(0, FOOTER_LINK_LIMIT);
+  const areaLinks = areas.slice(0, FOOTER_LINK_LIMIT);
+  const moreServices = services.length > FOOTER_LINK_LIMIT ? { label: 'All services', href: `${base}/services` } : null;
+  const hasLinkLists = serviceLinks.length > 0 || areaLinks.length > 0;
 
   const links = (
     [
@@ -260,8 +290,17 @@ export function Footer({ site, theme, footerStyle, services = [], areas = [] }: 
               </Link>
             ))}
           </div>
-          <FooterLinkRow title="Services" links={services.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} centered />
-          <FooterLinkRow title="Service areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} centered />
+          {hasLinkLists ? (
+            <div
+              className={clsx(
+                'mx-auto mt-10 grid max-w-2xl gap-10 border-t border-white/10 pt-8',
+                serviceLinks.length > 0 && areaLinks.length > 0 && 'sm:grid-cols-2',
+              )}
+            >
+              <FooterLinkList title="Our Services" links={serviceLinks} more={moreServices} labelColor={mutedText} linkStyle={linkStyle} centered />
+              <FooterLinkList title="Service Areas" links={areaLinks} labelColor={mutedText} linkStyle={linkStyle} centered />
+            </div>
+          ) : null}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {socialLinks.map((link) => (
               <SocialIconButton
@@ -322,10 +361,10 @@ export function Footer({ site, theme, footerStyle, services = [], areas = [] }: 
             ))}
           </div>
         </div>
-        {services.length > 0 || areas.length > 0 ? (
-          <div className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
-            <FooterLinkRow title="Services" links={services.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} />
-            <FooterLinkRow title="Service areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} />
+        {hasLinkLists ? (
+          <div className="mx-auto grid max-w-7xl gap-8 border-t border-white/10 px-4 py-8 sm:grid-cols-2 sm:px-6 lg:px-8">
+            <FooterLinkList title="Our Services" links={serviceLinks} more={moreServices} labelColor={mutedText} linkStyle={linkStyle} columns={2} />
+            <FooterLinkList title="Service Areas" links={areaLinks} labelColor={mutedText} linkStyle={linkStyle} columns={2} />
           </div>
         ) : null}
         <div className="border-t border-white/10 py-3 text-center text-xs" style={{ color: mutedText }}>
@@ -375,36 +414,18 @@ export function Footer({ site, theme, footerStyle, services = [], areas = [] }: 
           </div>
         </div>
 
-        <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wide" style={{ color: mutedText }}>
-            Quick Links
-          </p>
-          <ul className="space-y-2.5 text-sm">
-            {links.map(([label, href]) => (
-              <li key={label}>
-                <Link href={href} className="transition hover:opacity-90" style={{ color: mutedText }}>
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <FooterLinkList
+          title="Quick Links"
+          links={links.map(([label, href]) => ({ label, href }))}
+          labelColor={mutedText}
+          linkStyle={linkStyle}
+        />
 
-        {services.length > 0 ? (
-          <FooterLinkColumn
-            title="Our Services"
-            links={services.slice(0, FOOTER_LINK_LIMIT)}
-            more={services.length > FOOTER_LINK_LIMIT ? { label: 'All services', href: `${base}/services` } : null}
-            color={mutedText}
-          />
-        ) : null}
-
-        {areas.length > 0 ? (
-          <FooterLinkColumn title="Service Areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} more={null} color={mutedText} />
-        ) : null}
+        <FooterLinkList title="Our Services" links={serviceLinks} more={moreServices} labelColor={mutedText} linkStyle={linkStyle} />
+        <FooterLinkList title="Service Areas" links={areaLinks} labelColor={mutedText} linkStyle={linkStyle} />
 
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wide" style={{ color: mutedText }}>
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: mutedText }}>
             Contact
           </p>
           <ul className="space-y-4 text-sm">
