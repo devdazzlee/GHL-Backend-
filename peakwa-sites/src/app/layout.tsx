@@ -14,6 +14,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Peakwa Sites',
   description: 'Business websites built automatically',
+  other: { 'deploy-marker': 'deploy-test-2026-09-28-sites' },
 };
 
 export default function RootLayout({
