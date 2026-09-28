@@ -1,0 +1,81 @@
+name: Deploy dashboard to frontend VPS
+
+# Builds the admin dashboard (static single-page app) here and publishes it on
+# the frontend VPS, where nginx serves it for dashboard.peakwa.com. Each deploy
+# is its own release folder; a failed check switches the previous one back.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/deploy-dashboard-vps.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dashboard-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package release
+        run: |
+          tar -czf "$RUNNER_TEMP/peakwa-dashboard.tgz" -C dist .
+          du -h "$RUNNER_TEMP/peakwa-dashboard.tgz"
+
+      - name: SSH key
+        working-directory: .
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.FRONTEND_VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.FRONTEND_VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Upload, switch and check
+        working-directory: .
+        env:
+          VPS: ${{ secrets.FRONTEND_VPS_USER }}@${{ secrets.FRONTEND_VPS_HOST }}
+          RELEASE: ${{ github.sha }}
+        run: |
+          scp -i ~/.ssh/deploy_key "$RUNNER_TEMP/peakwa-dashboard.tgz" "$VPS:/tmp/peakwa-dashboard-$RELEASE.tgz"
+          ssh -i ~/.ssh/deploy_key "$VPS" "RELEASE=$RELEASE bash -s" <<'REMOTE'
+          set -euo pipefail
+          BASE=/var/www/peakwa-dashboard
+          DIR="$BASE/releases/$RELEASE"
+          rm -rf "$DIR" && mkdir -p "$DIR"
+          tar -xzf "/tmp/peakwa-dashboard-$RELEASE.tgz" -C "$DIR"
+          rm -f "/tmp/peakwa-dashboard-$RELEASE.tgz"
+          PREV="$(readlink -f "$BASE/current" 2>/dev/null || true)"
+          ln -sfn "$DIR" "$BASE/current"
+          page="$(curl -s -H 'Host: dashboard.peakwa.com' http://127.0.0.1/some/deep/route || true)"
+          if ! printf '%s' "$page" | grep -q 'id="root"'; then
+            echo "dashboard check failed"
+            if [ -n "$PREV" ] && [ -d "$PREV" ] && [ "$PREV" != "$DIR" ]; then
+              ln -sfn "$PREV" "$BASE/current"
+              echo "rolled back to $PREV"
+            fi
+            exit 1
+          fi
+          echo "dashboard serving release $RELEASE"
+          # Keep the 5 newest releases.
+          ls -1dt "$BASE"/releases/* | tail -n +6 | xargs -r rm -rf
+          REMOTE
