@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Mail, MapPin, Phone } from 'lucide-react';
 import clsx from 'clsx';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
+import { FOOTER_LINK_LIMIT, type FooterLink } from '@/src/lib/footerLinks';
 import { getMutedTextOnBackground, getTextColor } from '@/src/lib/theme';
 import type { FooterStyle } from '@/src/designs/presets';
 import { resolveDesignPreset } from '@/src/designs/presets';
@@ -10,6 +11,8 @@ type FooterProps = {
   site: GeneratedSite;
   theme: SiteTheme;
   footerStyle?: FooterStyle;
+  services?: FooterLink[];
+  areas?: FooterLink[];
 };
 
 type SocialLink = {
@@ -132,6 +135,59 @@ function IconBadge({
   );
 }
 
+function FooterLinkColumn({
+  title,
+  links,
+  more,
+  color,
+}: {
+  title: string;
+  links: FooterLink[];
+  more: FooterLink | null;
+  color: string;
+}) {
+  return (
+    <div>
+      <p className="mb-4 text-sm font-semibold uppercase tracking-wide" style={{ color }}>
+        {title}
+      </p>
+      <ul className="space-y-2.5 text-sm">
+        {links.map((link) => (
+          <li key={link.href}>
+            <Link href={link.href} className="transition hover:opacity-90" style={{ color }}>
+              {link.label}
+            </Link>
+          </li>
+        ))}
+        {more ? (
+          <li>
+            <Link href={more.href} className="font-semibold underline underline-offset-2" style={{ color }}>
+              {more.label}
+            </Link>
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
+function FooterLinkRow({ title, links, color, centered = false }: { title: string; links: FooterLink[]; color: string; centered?: boolean }) {
+  if (links.length === 0) return null;
+  return (
+    <p className={clsx('mt-3 text-sm', centered && 'text-center')} style={{ color }}>
+      <span className="font-semibold">{title}: </span>
+      {links.map((link, i) => (
+        <span key={link.href}>
+          {i > 0 ? ' · ' : null}
+          <Link href={link.href} className="transition hover:opacity-90" style={{ color }}>
+            {link.label}
+          </Link>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 /** Business name, with the logo in front of it when the site has one. */
 function FooterBrand({ site, className }: { site: FooterProps['site']; className: string }) {
   if (!site.logoUrl) return <p className={className}>{site.businessName}</p>;
@@ -148,7 +204,7 @@ function FooterBrand({ site, className }: { site: FooterProps['site']; className
   );
 }
 
-export function Footer({ site, theme, footerStyle }: FooterProps) {
+export function Footer({ site, theme, footerStyle, services = [], areas = [] }: FooterProps) {
   const design = resolveDesignPreset(site.designVariant);
   const style = footerStyle ?? design.footerStyle;
   const textColor = getTextColor(theme.primaryColor);
@@ -204,6 +260,8 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
               </Link>
             ))}
           </div>
+          <FooterLinkRow title="Services" links={services.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} centered />
+          <FooterLinkRow title="Service areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} centered />
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {socialLinks.map((link) => (
               <SocialIconButton
@@ -264,6 +322,12 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
             ))}
           </div>
         </div>
+        {services.length > 0 || areas.length > 0 ? (
+          <div className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+            <FooterLinkRow title="Services" links={services.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} />
+            <FooterLinkRow title="Service areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} color={mutedText} />
+          </div>
+        ) : null}
         <div className="border-t border-white/10 py-3 text-center text-xs" style={{ color: mutedText }}>
           © {new Date().getFullYear()} {site.businessName}. Powered by{' '}
           <a href="https://peakwa.com" target="_blank" rel="noopener noreferrer" className="underline">
@@ -286,7 +350,11 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
       <div
         className={clsx(
           'mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:px-8',
-          'md:grid-cols-3',
+          services.length > 0 && areas.length > 0
+            ? 'md:grid-cols-2 lg:grid-cols-5'
+            : services.length > 0 || areas.length > 0
+              ? 'md:grid-cols-2 lg:grid-cols-4'
+              : 'md:grid-cols-3',
         )}
       >
         <div>
@@ -321,6 +389,19 @@ export function Footer({ site, theme, footerStyle }: FooterProps) {
             ))}
           </ul>
         </div>
+
+        {services.length > 0 ? (
+          <FooterLinkColumn
+            title="Our Services"
+            links={services.slice(0, FOOTER_LINK_LIMIT)}
+            more={services.length > FOOTER_LINK_LIMIT ? { label: 'All services', href: `${base}/services` } : null}
+            color={mutedText}
+          />
+        ) : null}
+
+        {areas.length > 0 ? (
+          <FooterLinkColumn title="Service Areas" links={areas.slice(0, FOOTER_LINK_LIMIT)} more={null} color={mutedText} />
+        ) : null}
 
         <div>
           <p className="mb-4 text-sm font-semibold uppercase tracking-wide" style={{ color: mutedText }}>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { SiteNavbar } from '@/src/components/SiteNavbar';
 import { Footer } from '@/src/components/Footer';
+import { footerAreaLinks, footerServiceLinks } from '@/src/lib/footerLinks';
 import { BackToTopLazy } from '@/src/components/BackToTopLazy';
 import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
@@ -82,7 +83,13 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
         />
       </div>
       <div className="order-3">
-        <Footer site={site} theme={theme} footerStyle={design.footerStyle} />
+        <Footer
+          site={site}
+          theme={theme}
+          footerStyle={design.footerStyle}
+          services={footerServiceLinks(slug, servicesContent)}
+          areas={footerAreaLinks(slug, locations)}
+        />
         <BackToTopLazy accentColor={theme.accentColor} />
         {design.stickyCallBar && site.phone ? (
           <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 p-3 shadow-lg md:hidden">
