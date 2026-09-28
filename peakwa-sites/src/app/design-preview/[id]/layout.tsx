@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { Footer } from '@/src/components/Footer';
+import { footerAreaLinks, footerServiceLinks } from '@/src/lib/footerLinks';
 import { SiteNavbar } from '@/src/components/SiteNavbar';
 import { getDesignRecipe } from '@/src/designs/catalog';
 import { designCssVars, resolveDesignPreset } from '@/src/designs/presets';
@@ -75,7 +76,13 @@ export default async function DesignPreviewLayout({ children, params }: LayoutPr
 
       <main className="flex-1">{children}</main>
 
-      <Footer site={site} theme={theme} footerStyle={design.footerStyle} />
+      <Footer
+        site={site}
+        theme={theme}
+        footerStyle={design.footerStyle}
+        services={footerServiceLinks(`design-preview/${id}`, DESIGN_PREVIEW_SERVICES)}
+        areas={footerAreaLinks(`design-preview/${id}`, DESIGN_PREVIEW_LOCATIONS)}
+      />
     </div>
   );
 }

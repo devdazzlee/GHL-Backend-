@@ -24,3 +24,37 @@ export function footerAreaLinks(slug: string, locations: LocationPage[]): Footer
     .map((l) => ({ label: l.city, href: `/${slug}/${l.slug}` }));
 }
 
+
+function mixHex(hex: string, target: string, amount: number): string {
+  const parse = (h: string) => {
+    const v = h.replace('#', '');
+    const full = v.length === 3 ? v.split('').map((c) => c + c).join('') : v;
+    return [0, 2, 4].map((i) => Number.parseInt(full.slice(i, i + 2), 16));
+  };
+  const a = parse(hex);
+  const b = parse(target);
+  return `#${a
+    .map((c, i) => Math.round(c + (b[i] - c) * amount).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
+}
+
+/**
+ * Footer link color: the site's accent color, lightened (dark footer) or
+ * darkened (light footer) only as much as needed to be readable (WCAG AA 4.5:1)
+ * on the footer background, so links look like links, not like the labels.
+ */
+export function footerLinkColor(
+  accentHex: string,
+  backgroundHex: string,
+  contrastRatio: (fg: string, bg: string) => number,
+  minRatio = 4.5,
+): string {
+  if (contrastRatio(accentHex, backgroundHex) >= minRatio) return accentHex;
+  const towards = contrastRatio('#FFFFFF', backgroundHex) >= contrastRatio('#111827', backgroundHex) ? '#FFFFFF' : '#111827';
+  for (let step = 1; step <= 20; step += 1) {
+    const candidate = mixHex(accentHex, towards, step * 0.05);
+    if (contrastRatio(candidate, backgroundHex) >= minRatio) return candidate;
+  }
+  return towards;
+}
