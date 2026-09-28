@@ -81,3 +81,44 @@ export function findTownsWithinRadius(zipCode, radiusMiles) {
       .sort((a, b) => a.miles - b.miles || a.city.localeCompare(b.city)),
   };
 }
+
+/** Two-letter codes for US states, DC and territories in the ZIP dataset. */
+export const US_STATES = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado',
+  CT: 'Connecticut', DE: 'Delaware', DC: 'District of Columbia', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky',
+  LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota',
+  MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire',
+  NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota',
+  OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island',
+  SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+  VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+  PR: 'Puerto Rico',
+};
+
+/** "Colorado", "colorado", "CO", " co " -> "CO"; anything else -> null. */
+export function toStateCode(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const upper = text.toUpperCase();
+  if (US_STATES[upper]) return upper;
+  const match = Object.entries(US_STATES).find(([, name]) => name.toLowerCase() === text.toLowerCase());
+  return match ? match[0] : null;
+}
+
+/**
+ * Counties (and the dataset's spelling of the town) for a town name in one state.
+ * @returns {Array<{ city: string, county: string, state: string }>} distinct, sorted by county
+ */
+export function findTownCounties(city, stateCode) {
+  const name = String(city ?? '').trim().toLowerCase();
+  const state = toStateCode(stateCode);
+  if (!name || !state) return [];
+  const found = new Map();
+  for (const row of loadIndex().rows) {
+    if (row.state !== state || String(row.place).toLowerCase() !== name) continue;
+    const key = String(row.county).toLowerCase();
+    if (!found.has(key)) found.set(key, { city: row.place, county: row.county, state: row.state });
+  }
+  return [...found.values()].sort((a, b) => a.county.localeCompare(b.county));
+}
