@@ -15,7 +15,7 @@ import {
 } from './contentContract.js';
 import { ContentUnitError, generateUnit } from './contentUnit.runner.js';
 import { attachSeoExtra, buildSeoExtraLinkTargets } from './seoExtra.service.js';
-import { findTownsWithinRadius } from './zipRadius.service.js';
+import { findTownCounties, findTownsWithinRadius, toStateCode } from './zipRadius.service.js';
 
 const OPENAI_CONTENT_MODEL = 'gpt-4o';
 
@@ -68,12 +68,20 @@ function slugify(...parts) {
     .replace(/^-+|-+$/g, '');
 }
 
-function validateLocations(locations) {
+/**
+ * Manual cities: only the city name is required.
+ * - state: the one given, otherwise the site's own state (never a fixed default)
+ * - county: the one given, otherwise looked up from the ZIP dataset for that
+ *   town in that state; a town found in several counties must be told which one
+ */
+export function resolveManualLocations(locations, site) {
   if (!Array.isArray(locations) || locations.length === 0) {
     throw new AppError('Field `locations` must be a non-empty array.', 400, {
       code: 'INVALID_BODY',
     });
   }
+
+  const siteState = toStateCode(site?.state);
 
   return locations.map((loc, index) => {
     if (!loc || typeof loc !== 'object') {
@@ -81,17 +89,37 @@ function validateLocations(locations) {
     }
 
     const city = String(loc.city ?? '').trim();
-    const county = String(loc.county ?? '').trim();
-    const state = String(loc.state ?? 'NJ').trim() || 'NJ';
-
     if (!city) {
       throw new AppError(`locations[${index}].city is required.`, 400, { code: 'INVALID_BODY' });
     }
-    if (!county) {
-      throw new AppError(`locations[${index}].county is required.`, 400, { code: 'INVALID_BODY' });
+
+    const givenState = String(loc.state ?? '').trim();
+    const state = givenState ? toStateCode(givenState) : siteState;
+    if (!state) {
+      throw new AppError(
+        givenState
+          ? `"${givenState}" is not a US state. Use a state name or its 2-letter code.`
+          : `Enter the state for ${city} (this site's state "${site?.state ?? ''}" is not recognised).`,
+        400,
+        { code: 'INVALID_STATE' },
+      );
     }
 
-    return { city, county, state };
+    const givenCounty = String(loc.county ?? '').trim().replace(/\s+county$/i, '');
+    if (givenCounty) return { city, county: givenCounty, state };
+
+    const matches = findTownCounties(city, state);
+    if (matches.length === 1) return { city: matches[0].city, county: matches[0].county, state };
+    if (matches.length > 1) {
+      throw new AppError(
+        `${city}, ${state} exists in more than one county (${matches.map((m) => m.county).join(', ')}). Enter the county.`,
+        400,
+        { code: 'COUNTY_AMBIGUOUS', details: { city, state, counties: matches.map((m) => m.county) } },
+      );
+    }
+    throw new AppError(`${city} was not found in ${state}. Check the spelling or enter the county.`, 400, {
+      code: 'CITY_NOT_FOUND',
+    });
   });
 }
 
@@ -417,7 +445,7 @@ export async function generateLocationPages(siteId, locations) {
     }
 
     const schema = await getSchemaForIndustry(site.industry);
-    const validatedLocations = validateLocations(locations);
+    const validatedLocations = resolveManualLocations(locations, site);
     const createdPages = [];
 
     for (const location of validatedLocations) {
