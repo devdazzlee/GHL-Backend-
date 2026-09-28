@@ -94,7 +94,7 @@ Each workflow has its **own path filter and its own concurrency group**, so they
   2. Package `dist/` as a tarball, then `scp` it to `/tmp` on the server.
   3. Unpack into a new release folder `/var/www/peakwa-dashboard/releases/<commit sha>/`.
   4. Switch `/var/www/peakwa-dashboard/current` → the new release (symlink). nginx serves `current`, so no restart is needed.
-  5. **Check:** request a deep route with `Host: dashboard.peakwa.com` from the server itself. It must return the app page (`id="root"`).
+  5. **Check:** request a deep route of `https://dashboard.peakwa.com` from the server itself (`--resolve` to 127.0.0.1). It must return the app page (`id="root"`).
   6. **Automatic rollback:** if the check fails, `current` is pointed back at the previous release and the run fails.
   7. Keep the 5 newest releases; delete older ones.
 
@@ -215,7 +215,7 @@ Vercel keeps every deployment. In the Vercel dashboard, open project `ghl-backen
 | Hostname | Today | Target | Status |
 |---|---|---|---|
 | `site.peakwa.com` | CNAME `0f23cae859592004.vercel-dns-017.com.` (**Vercel**), TTL 14400 | A `169.58.4.58` | **Not switched.** The VPS copy passed a parity test: 291/291 URLs across all 14 sites matched Vercel. |
-| `dashboard.peakwa.com` | does not exist (the dashboard is used at `ghl-backend-1qqr.vercel.app`) | A `169.58.4.58` | **Not created.** It also needs `DASHBOARD_URL=https://dashboard.peakwa.com` in the backend's `.env` (CORS). |
+| `dashboard.peakwa.com` | A `169.58.4.58` (added 28 Sep 2026) | same | **DNS live; HTTPS certificate issued (Certbot, auto-renewing).** Still needs `DASHBOARD_URL=https://dashboard.peakwa.com` in the backend `.env` (CORS). |
 
 DNS for `peakwa.com` is at Hostinger (nameservers `ns1/ns2.dns-parking.com`). Both new nginx sites on the VPS are **HTTP only** until certificates are issued.
 
