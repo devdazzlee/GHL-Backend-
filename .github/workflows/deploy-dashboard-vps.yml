@@ -66,7 +66,8 @@ jobs:
           rm -f "/tmp/peakwa-dashboard-$RELEASE.tgz"
           PREV="$(readlink -f "$BASE/current" 2>/dev/null || true)"
           ln -sfn "$DIR" "$BASE/current"
-          page="$(curl -s -H 'Host: dashboard.peakwa.com' http://127.0.0.1/some/deep/route || true)"
+          # HTTPS is on (HTTP now redirects), so check over HTTPS against this server itself.
+          page="$(curl -s --resolve dashboard.peakwa.com:443:127.0.0.1 https://dashboard.peakwa.com/some/deep/route || true)"
           if ! printf '%s' "$page" | grep -q 'id="root"'; then
             echo "dashboard check failed"
             if [ -n "$PREV" ] && [ -d "$PREV" ] && [ "$PREV" != "$DIR" ]; then
