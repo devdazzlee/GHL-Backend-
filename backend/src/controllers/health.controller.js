@@ -10,7 +10,7 @@ export function getHealth(req, res, next) {
         environment: env.NODE_ENV,
         timestamp: new Date().toISOString(),
         // Marker to verify GitHub Actions → VPS auto-deploy
-        deployMarker: 'vps-git-pipeline-ok',
+        deployMarker: 'deploy-test-2026-09-28-backend',
       },
       requestId: req.requestId,
     });
