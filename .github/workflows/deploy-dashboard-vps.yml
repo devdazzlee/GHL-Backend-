@@ -6,7 +6,7 @@ name: Deploy dashboard to frontend VPS
 
 on:
   push:
-    branches: [main, feature/vps-frontends]
+    branches: [main]
     paths:
       - 'dashboard/**'
       - '.github/workflows/deploy-dashboard-vps.yml'

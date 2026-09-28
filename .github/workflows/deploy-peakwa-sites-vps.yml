@@ -7,7 +7,7 @@ name: Deploy peakwa-sites to frontend VPS
 
 on:
   push:
-    branches: [main, feature/vps-frontends]
+    branches: [main]
     paths:
       - 'peakwa-sites/**'
       - '.github/workflows/deploy-peakwa-sites-vps.yml'
