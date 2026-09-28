@@ -390,8 +390,9 @@ function PageContentPanel({
 }
 
 function emptyLocationRow(): Phase4LocationInput {
-  return { city: '', county: '', state: 'NJ' };
+  return { city: '', county: '', state: '' };
 }
+
 
 function ColorField({
   label,
@@ -711,7 +712,8 @@ export function GeneratedSitesPage() {
         description: editData.description?.trim() || null,
         address: editData.address?.trim() || null,
         city: editData.city?.trim() ?? '',
-        state: editData.state?.trim() || 'NJ',
+        // An emptied field keeps the site's current state (never a fixed default).
+        state: editData.state?.trim() || editTarget.state,
         facebookUrl: editData.facebookUrl?.trim() || null,
         instagramUrl: editData.instagramUrl?.trim() || null,
         websiteUrl: editData.websiteUrl?.trim() || null,
@@ -842,13 +844,14 @@ export function GeneratedSitesPage() {
     const locations = locationRows
       .map((row) => ({
         city: row.city.trim(),
-        county: row.county.trim(),
-        state: row.state?.trim() || 'NJ',
+        // Empty county: looked up from ZIP data; empty state: the site's own state.
+        county: row.county?.trim() || undefined,
+        state: row.state?.trim() || undefined,
       }))
-      .filter((row) => row.city && row.county);
+      .filter((row) => row.city);
 
     if (locations.length === 0) {
-      setError('Add at least one city and county.');
+      setError('Add at least one city.');
       return;
     }
 
@@ -2108,7 +2111,7 @@ export function GeneratedSitesPage() {
                   {locationRows.map((row, index) => (
                     <div
                       key={index}
-                      className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1fr_1fr_auto]"
+                      className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1.4fr_0.8fr_1fr_auto]"
                     >
                       <div>
                         <label className="mb-1 block text-xs font-medium text-slate-500">City</label>
@@ -2126,20 +2129,33 @@ export function GeneratedSitesPage() {
                         />
                       </div>
                       <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-500">State</label>
+                        <input
+                          type="text"
+                          value={row.state ?? ''}
+                          onChange={(e) => {
+                            const next = [...locationRows];
+                            next[index] = { ...next[index], state: e.target.value };
+                            setLocationRows(next);
+                          }}
+                          className={inputClass}
+                          placeholder={selectedSite?.state || 'Site state'}
+                        />
+                      </div>
+                      <div>
                         <label className="mb-1 block text-xs font-medium text-slate-500">
-                          County
+                          County <span className="font-normal text-slate-600">(optional)</span>
                         </label>
                         <input
                           type="text"
-                          required
-                          value={row.county}
+                          value={row.county ?? ''}
                           onChange={(e) => {
                             const next = [...locationRows];
                             next[index] = { ...next[index], county: e.target.value };
                             setLocationRows(next);
                           }}
                           className={inputClass}
-                          placeholder="Bergen"
+                          placeholder="Found automatically"
                         />
                       </div>
                       <div className="flex items-end">

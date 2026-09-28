@@ -430,7 +430,9 @@ export interface Phase4SitePayload {
 
 export interface Phase4LocationInput {
   city: string;
-  county: string;
+  /** Optional: looked up from ZIP data when left empty. */
+  county?: string;
+  /** Optional: the site's own state when left empty. */
   state?: string;
 }
 
