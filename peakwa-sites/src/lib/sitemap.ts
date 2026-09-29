@@ -3,6 +3,7 @@ import { SITE_BASE_URL } from '@/src/config';
 import { getLocationPages, getPublishedKeywordPages } from '@/src/lib/api';
 import { getBlogListing } from '@/src/lib/blog';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
+import { siteUrlFor } from '@/src/lib/siteLinks';
 import type { GeneratedSite } from '@/src/lib/types';
 
 function slugifyService(title: string): string {
@@ -20,7 +21,7 @@ function siteLastModified(site: GeneratedSite): Date {
 
 /** All public URLs for one generated site — shared by per-site and root sitemaps. */
 export async function buildSiteSitemapEntries(site: GeneratedSite): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = `${SITE_BASE_URL.replace(/\/$/, '')}/${site.slug}`;
+  const baseUrl = siteUrlFor(site);
   const lastModified = siteLastModified(site);
 
   const entries: MetadataRoute.Sitemap = [

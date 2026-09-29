@@ -12,6 +12,7 @@ import {
 import type { SeoExtraContent } from '@/src/lib/content';
 import type { GeneratedSite } from '@/src/lib/types';
 import { resolveTheme } from '@/src/lib/theme';
+import { sitePath } from '@/src/lib/siteUrls';
 
 type LinkItem = { label?: string; href?: string };
 
@@ -32,10 +33,12 @@ function normalizePathKey(href: string): string {
     .replace(/^\/+|\/+$/g, '');
 }
 
-function resolveInternalHref(siteSlug: string, href: string): string {
-  const key = normalizePathKey(href);
-  if (!key) return `/${siteSlug}`;
-  return `/${siteSlug}/${key}`;
+/** A stored page key ("services/x", "about", or "" for home) as a link on the site's address. */
+function resolveInternalHref(site: GeneratedSite, href: string): string {
+  let key = normalizePathKey(href);
+  if (key === site.slug) key = '';
+  else if (key.startsWith(`${site.slug}/`)) key = key.slice(site.slug.length + 1);
+  return sitePath(site, key ? `/${key}` : '');
 }
 
 function mergeLinks(
@@ -146,7 +149,7 @@ export function SeoContentSection({
               {links.map((link) => (
                 <li key={`seo-link-${link.href}-${link.label}`}>
                   <Link
-                    href={resolveInternalHref(site.slug, link.href)}
+                    href={resolveInternalHref(site, link.href)}
                     className="group flex h-full items-center justify-between gap-3 bg-white px-5 py-4 transition duration-300 hover:-translate-y-0.5"
                     style={cardChromeStyle()}
                   >

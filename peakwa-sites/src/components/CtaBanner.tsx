@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { sitePath } from '@/src/lib/siteUrls';
 import { Phone } from 'lucide-react';
 import clsx from 'clsx';
 import type { GeneratedSite } from '@/src/lib/types';
@@ -63,7 +64,7 @@ export function CtaBanner({ site, heading, subtext, buttonText = 'Contact Us' }:
           )}
         >
           <Link
-            href={`/${site.slug}/contact`}
+            href={sitePath(site, '/contact')}
             className="px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
             style={{
               backgroundColor: '#fff',

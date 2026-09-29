@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { ChevronRight, Mail, MapPin, Phone } from 'lucide-react';
 import clsx from 'clsx';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
@@ -230,7 +231,7 @@ export function Footer({ site, theme, footerStyle, services = [], areas = [] }: 
   const textColor = getTextColor(theme.primaryColor);
   const mutedText = getMutedTextOnBackground(theme.primaryColor);
   const accentText = getTextColor(theme.accentColor);
-  const base = `/${site.slug}`;
+  const base = siteBasePath(site);
   const socialLinks = buildSocialLinks(site);
   // Links use the site's accent color (tinted only if needed to be readable) with an
   // accent underline, so they never look like the surrounding label text.

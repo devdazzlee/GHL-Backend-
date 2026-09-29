@@ -64,6 +64,7 @@ import {
 } from '../services/blog.service.js';
 import { uploadSiteImage } from '../services/media.service.js';
 import { changeSiteSlug, getRedirectMap, listSiteRedirects } from '../services/siteRedirects.service.js';
+import { getSiteDomain, listCustomDomains, setSiteDomain, verifySiteDomain } from '../services/siteDomains.service.js';
 import { getStoredSiteImages, listImageSlots, searchStockPhotos, setSiteImage } from '../services/siteImages.service.js';
 import {
   getPageEditor,
@@ -1397,6 +1398,43 @@ router.get(
   asyncHandler(async (req, res) => {
     const redirects = await getRedirectMap();
     return res.json({ success: true, data: { redirects }, requestId: req.requestId });
+  }),
+);
+
+// ---- Custom domains (nginx + certificate on the frontend server) ----
+
+router.get(
+  '/sites/:id/domain',
+  asyncHandler(async (req, res) => {
+    const domain = await getSiteDomain(req.params.id);
+    return res.json({ success: true, data: { domain }, requestId: req.requestId });
+  }),
+);
+
+/** Body: { domain } — e.g. "www.acmehvac.com"; empty or null removes it. Starts unverified. */
+router.put(
+  '/sites/:id/domain',
+  asyncHandler(async (req, res) => {
+    const domain = await setSiteDomain(req.params.id, req.body?.domain);
+    return res.json({ success: true, data: { domain }, requestId: req.requestId });
+  }),
+);
+
+/** Checks DNS and HTTPS; the domain goes live when both pass. */
+router.post(
+  '/sites/:id/domain/verify',
+  asyncHandler(async (req, res) => {
+    const result = await verifySiteDomain(req.params.id);
+    return res.json({ success: true, data: result, requestId: req.requestId });
+  }),
+);
+
+/** Renderer: every active site's domain (routing, and 301s once live). */
+router.get(
+  '/custom-domains',
+  asyncHandler(async (req, res) => {
+    const domains = await listCustomDomains();
+    return res.json({ success: true, data: { domains }, requestId: req.requestId });
   }),
 );
 

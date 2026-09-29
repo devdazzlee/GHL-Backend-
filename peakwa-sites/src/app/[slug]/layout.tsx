@@ -8,7 +8,8 @@ import { getLocationPages, getSiteBySlug } from '@/src/lib/api';
 import type { GeneratedSite } from '@/src/lib/types';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
 import { resolveTheme } from '@/src/lib/theme';
-import { getMetadataBase, getSiteRobots } from '@/src/lib/seo';
+import { getSiteMetadataBase, getSiteRobots } from '@/src/lib/seo';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { designCssVars, resolveDesignPreset } from '@/src/designs/presets';
 import clsx from 'clsx';
 
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
 
   // Default for every page of the site; pages using buildPageMetadata repeat it.
   return {
-    metadataBase: getMetadataBase(),
+    metadataBase: getSiteMetadataBase(site),
     robots: getSiteRobots(site),
   };
 }
@@ -87,8 +88,8 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
           site={site}
           theme={theme}
           footerStyle={design.footerStyle}
-          services={footerServiceLinks(slug, servicesContent)}
-          areas={footerAreaLinks(slug, locations)}
+          services={footerServiceLinks(siteBasePath(site), servicesContent)}
+          areas={footerAreaLinks(siteBasePath(site), locations)}
         />
         <BackToTopLazy accentColor={theme.accentColor} />
         {design.stickyCallBar && site.phone ? (

@@ -1,21 +1,23 @@
 import { SITE_BASE_URL } from '@/src/config';
 import { getSiteBySlug } from '@/src/lib/api';
 import { siteIsIndexable } from '@/src/lib/seo';
+import { siteOriginFor, siteUrlFor } from '@/src/lib/siteLinks';
 
 type RouteParams = { params: Promise<{ slug: string }> };
 
 /**
  * Per-site robots.txt as an explicit route handler.
  * Nested robots.ts was shadowed by [locationSlug] (404 for robots.txt).
- * Note: crawlers only read /robots.txt at the host root; this file mirrors the
- * site's setting for tools that look here.
+ * On the platform, crawlers only read /robots.txt at the host root, so this file
+ * mirrors the site's setting for tools that look here. On the site's own domain it
+ * IS the root /robots.txt (the middleware maps /robots.txt here).
  */
 export async function GET(_request: Request, { params }: RouteParams) {
   const { slug } = await params;
-  const base = SITE_BASE_URL.replace(/\/$/, '');
-  const sitemap = `${base}/${slug}/sitemap.xml`;
   // If the backend can't answer, fail closed (Disallow) rather than erroring.
   const site = await getSiteBySlug(slug).catch(() => null);
+  const base = site ? siteOriginFor(site) : SITE_BASE_URL.replace(/\/$/, '');
+  const sitemap = site ? siteUrlFor(site, '/sitemap.xml') : `${base}/${slug}/sitemap.xml`;
 
   if (!siteIsIndexable(site)) {
     const body = ['User-Agent: *', 'Disallow: /', `Host: ${base}`, ''].join('\n');

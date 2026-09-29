@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { ArrowRight, Clock } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { buildPageMetadata } from '@/src/lib/seo';
@@ -102,13 +103,13 @@ function BlogImage({
 
 function FeaturedPost({
   post,
-  slug,
+  base,
   image,
   accentColor,
   primaryColor,
 }: {
   post: BlogListItem;
-  slug: string;
+  base: string;
   image: string | null;
   accentColor: string;
   primaryColor: string;
@@ -140,7 +141,7 @@ function FeaturedPost({
           {post.readTime || '5 min read'}
         </div>
         <Link
-          href={`/${slug}/blog/${post.key}`}
+          href={`${base}/blog/${post.key}`}
           className="mt-6 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-90"
           style={{ backgroundColor: accentColor, color: accentText }}
         >
@@ -154,20 +155,20 @@ function FeaturedPost({
 
 function SidebarPost({
   post,
-  slug,
+  base,
   image,
   accentColor,
   primaryColor,
 }: {
   post: BlogListItem;
-  slug: string;
+  base: string;
   image: string | null;
   accentColor: string;
   primaryColor: string;
 }) {
   return (
     <Link
-      href={`/${slug}/blog/${post.key}`}
+      href={`${base}/blog/${post.key}`}
       className={`group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ${CARD_HOVER}`}
     >
       <div className="relative h-[140px] w-full shrink-0 overflow-hidden sm:h-[160px]">
@@ -193,13 +194,13 @@ function SidebarPost({
 
 function GridPostCard({
   post,
-  slug,
+  base,
   image,
   accentColor,
   primaryColor,
 }: {
   post: BlogListItem;
-  slug: string;
+  base: string;
   image: string | null;
   accentColor: string;
   primaryColor: string;
@@ -224,7 +225,7 @@ function GridPostCard({
           {post.readTime || '5 min read'}
         </div>
         <Link
-          href={`/${slug}/blog/${post.key}`}
+          href={`${base}/blog/${post.key}`}
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold transition group-hover:gap-3"
           style={{ color: accentColor }}
         >
@@ -240,6 +241,7 @@ export default async function BlogPage({ params }: PageProps) {
   const { slug } = await params;
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
 
   const images = await getSiteImages(slug);
   const listing = await getBlogListing(site, images.blog);
@@ -339,7 +341,7 @@ export default async function BlogPage({ params }: PageProps) {
                   <div className="lg:col-span-2">
                     <FeaturedPost
                       post={featuredPost}
-                      slug={slug}
+                      base={base}
                       image={postImage(featuredPost) ?? heroImage}
                       accentColor={theme.accentColor}
                       primaryColor={theme.primaryColor}
@@ -355,7 +357,7 @@ export default async function BlogPage({ params }: PageProps) {
                         <SidebarPost
                           key={`sidebar-${post.title}-${postIndex}`}
                           post={post}
-                          slug={slug}
+                          base={base}
                           image={postImage(post)}
                           accentColor={theme.accentColor}
                           primaryColor={theme.primaryColor}
@@ -382,7 +384,7 @@ export default async function BlogPage({ params }: PageProps) {
                       <GridPostCard
                         key={`grid-${post.title}-${postIndex}`}
                         post={post}
-                        slug={slug}
+                        base={base}
                         image={postImage(post)}
                         accentColor={theme.accentColor}
                         primaryColor={theme.primaryColor}

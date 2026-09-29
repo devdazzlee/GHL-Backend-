@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { IS_SEARCH_INDEXABLE, SITE_BASE_URL } from '@/src/config';
 import { isSiteIndexable, robotsDirective } from '@/src/lib/indexing';
+import { siteOriginFor, siteUrlFor } from '@/src/lib/siteLinks';
 import type { GeneratedSite } from '@/src/lib/types';
 
 /** HTTP X-Robots-Tag value — must stay in sync with getSiteRobots(). */
@@ -35,6 +36,18 @@ export function buildCanonicalUrl(...pathParts: string[]): string {
 
 export function getMetadataBase(): URL {
   return new URL(`${SITE_BASE_URL.replace(/\/$/, '')}/`);
+}
+
+/** Metadata base for one site: its own domain once that is live. */
+export function getSiteMetadataBase(site: GeneratedSite): URL {
+  return new URL(`${siteOriginFor(site)}/`);
+}
+
+/** Canonical URL of a site page; pathParts start with the site slug, as the pages pass them. */
+export function buildSiteCanonicalUrl(site: GeneratedSite, pathParts: string[]): string {
+  const rest = pathParts[0] === site.slug ? pathParts.slice(1) : pathParts;
+  const path = rest.filter(Boolean).join('/');
+  return siteUrlFor(site, path ? `/${path}` : '');
 }
 
 /** Keywords derived from canonical site business data — not hand-written per page. */
@@ -73,7 +86,7 @@ export function buildPageMetadata({
   pathParts,
   openGraphType = 'website',
 }: BuildPageMetadataInput): Metadata {
-  const canonical = buildCanonicalUrl(...pathParts);
+  const canonical = buildSiteCanonicalUrl(site, pathParts);
   const keywords = buildSiteKeywords(site);
 
   return {

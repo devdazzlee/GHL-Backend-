@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { ArrowRight, Phone } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import clsx from 'clsx';
@@ -110,7 +111,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 function ServiceHero({
   site,
-  slug,
+  base,
   serviceTitle,
   serviceImage,
   theme,
@@ -119,7 +120,8 @@ function ServiceHero({
   subheading,
 }: {
   site: GeneratedSite;
-  slug: string;
+  /** Link prefix: "" on the site's own domain, "/{slug}" on the platform. */
+  base: string;
   serviceTitle: string;
   serviceImage: string | null;
   theme: SiteTheme;
@@ -171,7 +173,7 @@ function ServiceHero({
           site={site}
           skipSchema
           items={[
-            { label: 'Services', href: `/${slug}/services` },
+            { label: 'Services', href: `${base}/services` },
             { label: serviceTitle },
           ]}
         />
@@ -200,7 +202,7 @@ function ServiceHero({
           )}
         >
           <Link
-            href={`/${slug}/contact`}
+            href={`${base}/contact`}
             className="inline-flex items-center justify-center px-8 py-3 text-sm font-semibold shadow-lg transition hover:scale-105"
             style={{
               backgroundColor: theme.accentColor,
@@ -230,6 +232,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const { slug, serviceSlug } = await params;
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
 
   const services = parseJson<ServicesContent>(site.servicesContent, {});
   const allServices = services?.services || [];
@@ -253,7 +256,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
     return (
       <ServiceDetailFromContent
         site={site}
-        slug={slug}
+        base={base}
         serviceTitle={serviceTitle}
         serviceImage={serviceImage}
         overviewImage={images.about ?? images.services[serviceIndex + 1] ?? images.hero}
@@ -292,13 +295,13 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         serviceSlug={serviceSlug}
         faqs={faqs}
         breadcrumbItems={[
-          { label: 'Services', href: `/${slug}/services` },
+          { label: 'Services', href: `${base}/services` },
           { label: serviceTitle },
         ]}
       />
       <ServiceHero
         site={site}
-        slug={slug}
+        base={base}
         serviceTitle={serviceTitle}
         serviceImage={serviceImage}
         theme={theme}
@@ -376,7 +379,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
               return (
                 <Link
                   key={other.title}
-                  href={`/${slug}/services/${otherSlug}`}
+                  href={`${base}/services/${otherSlug}`}
                   className="group flex flex-col bg-white p-6 transition duration-300 hover:-translate-y-1"
                   style={{
                     ...cardChromeStyle(),
@@ -419,7 +422,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
 
 type ServiceDetailFromContentProps = {
   site: GeneratedSite;
-  slug: string;
+  /** Link prefix: "" on the site's own domain, "/{slug}" on the platform. */
+  base: string;
   serviceTitle: string;
   serviceImage: string | null;
   overviewImage: string | null;
@@ -431,7 +435,7 @@ type ServiceDetailFromContentProps = {
 
 function ServiceDetailFromContent({
   site,
-  slug,
+  base,
   serviceTitle,
   serviceImage,
   overviewImage,
@@ -457,13 +461,13 @@ function ServiceDetailFromContent({
         serviceSlug={slugifyService(serviceTitle)}
         faqs={faqs}
         breadcrumbItems={[
-          { label: 'Services', href: `/${slug}/services` },
+          { label: 'Services', href: `${base}/services` },
           { label: serviceTitle },
         ]}
       />
       <ServiceHero
         site={site}
-        slug={slug}
+        base={base}
         serviceTitle={serviceTitle}
         serviceImage={serviceImage}
         theme={theme}
@@ -603,7 +607,7 @@ function ServiceDetailFromContent({
               return (
                 <Link
                   key={other.title}
-                  href={`/${slug}/services/${otherSlug}`}
+                  href={`${base}/services/${otherSlug}`}
                   className="group flex flex-col bg-white p-6 transition duration-300 hover:-translate-y-1"
                   style={{
                     ...cardChromeStyle(),
