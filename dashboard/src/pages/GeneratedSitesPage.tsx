@@ -937,9 +937,15 @@ export function GeneratedSitesPage() {
         icon: serviceForm.icon.trim(),
       });
       await refreshSelectedSite(updated);
+      const addedTitle = serviceForm.title.trim();
+      const wroteText = !serviceForm.shortDescription.trim() || !serviceForm.fullDescription.trim() || !serviceForm.icon.trim();
       setServiceForm(emptyServiceForm);
       setServiceDialogOpen(false);
-      setSuccess('Service added.');
+      setSuccess(
+        wroteText
+          ? `Service "${addedTitle}" added with AI-written text. Its own page is being written now and will be ready in about a minute.`
+          : 'Service added.',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add service');
     } finally {
@@ -1372,15 +1378,17 @@ export function GeneratedSitesPage() {
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
             <DialogDescription>
-              Add a service to this site. It will appear on the services and home pages.
+              Type just the service name: its descriptions, icon and its own page are written for this business
+              automatically. It appears on the home and services pages, the menu and the footer.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => void handleAddService(e)} className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Title</label>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Service name</label>
               <input
                 type="text"
                 required
+                autoFocus
                 value={serviceForm.title}
                 onChange={(e) => setServiceForm((f) => ({ ...f, title: e.target.value }))}
                 className={inputClass}
@@ -1388,12 +1396,16 @@ export function GeneratedSitesPage() {
                 disabled={savingService}
               />
             </div>
+            <details className="rounded-lg border border-slate-800 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-slate-400">
+                Write the text myself (optional; anything left empty is written for you)
+              </summary>
+              <div className="mt-3 space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 Short Description
               </label>
               <textarea
-                required
                 rows={2}
                 value={serviceForm.shortDescription}
                 onChange={(e) =>
@@ -1409,7 +1421,6 @@ export function GeneratedSitesPage() {
                 Full Description
               </label>
               <textarea
-                required
                 rows={4}
                 value={serviceForm.fullDescription}
                 onChange={(e) =>
@@ -1424,7 +1435,6 @@ export function GeneratedSitesPage() {
               <label className="mb-1 block text-xs font-medium text-slate-500">Icon</label>
               <input
                 type="text"
-                required
                 value={serviceForm.icon}
                 onChange={(e) => setServiceForm((f) => ({ ...f, icon: e.target.value }))}
                 className={inputClass}
@@ -1432,6 +1442,11 @@ export function GeneratedSitesPage() {
                 disabled={savingService}
               />
             </div>
+              </div>
+            </details>
+            {savingService ? (
+              <p className="text-xs text-slate-400">Writing the service for this business… this takes about 10-20 seconds.</p>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -1441,9 +1456,11 @@ export function GeneratedSitesPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={savingService}>
+              <Button type="submit" disabled={savingService || !serviceForm.title.trim()}>
                 {savingService ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save
+                {serviceForm.shortDescription.trim() && serviceForm.fullDescription.trim() && serviceForm.icon.trim()
+                  ? 'Add service'
+                  : 'Generate & add service'}
               </Button>
             </div>
           </form>

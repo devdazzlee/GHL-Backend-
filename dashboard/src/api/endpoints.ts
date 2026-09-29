@@ -664,9 +664,11 @@ export async function addPhase4Service(
   id: string,
   data: Phase4ServicePayload,
 ): Promise<Phase4GeneratedSite> {
+  // Empty descriptions / icon are written by the AI on the server (about 10-20 seconds).
   const { data: response } = await api.post<ApiResponse<{ site: Phase4GeneratedSite }>>(
     `/phase4/sites/${id}/services`,
     data,
+    { timeout: 120000 },
   );
   return response.data.site;
 }
