@@ -1,12 +1,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { AppError } from '../utils/AppError.js';
+import { sessionFromRequest } from '../services/adminSession.service.js';
 
 /**
  * Access control for /phase4.
  *
  * Roles and where their keys come from (environment only, never code):
- *   admin    ADMIN_API_KEYS="raza=<key>,richie=<key>"  full access (dashboard)
+ *   admin    ADMIN_API_KEYS="raza=<key>,richie=<key>"  full access (dashboard); also a signed-in
+ *            dashboard session (cookie, see adminSession.service.js)
  *   renderer SITE_RENDERER_API_KEY=<key>               read-only site endpoints (peakwa-sites)
  *   webhook  WEBHOOK_API_KEY=<key>                     POST /webhook only (order form);
  *                                                      if unset, /webhook stays public as today
@@ -84,6 +86,9 @@ export function resolveRole(req) {
   const adminLabel = matchKey(token, adminKeys);
   if (adminLabel) return { role: 'admin', label: adminLabel };
 
+  const session = sessionFromRequest(req);
+  if (session) return { role: 'admin', label: session.label };
+
   const rendererKey = process.env.SITE_RENDERER_API_KEY?.trim();
   const rendererProvided = String(req.get('x-site-api-key') ?? '').trim() || token;
   if (rendererKey && rendererKey.length >= 24 && matchKey(rendererProvided, [{ label: 'renderer', key: rendererKey }])) {
@@ -104,6 +109,8 @@ const failedAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   skipSuccessfulRequests: true,
+  // A signed-in caller's own errors (e.g. a 400 on a bad form) are not failed sign-ins.
+  requestWasSuccessful: (req, res) => res.locals.authOk === true || res.statusCode < 400,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -147,6 +154,26 @@ function authCheck(req, res, next) {
     }),
   );
 }
+
+/**
+ * Dashboard routes outside /phase4 (locations, posts, jobs, setup, Google connect):
+ * a signed-in session or an admin key. Failed attempts are rate-limited.
+ */
+export const requireAdmin = [
+  failedAuthLimiter,
+  (req, res, next) => {
+    const caller = resolveRole(req);
+    if (caller?.role === 'admin') {
+      req.auth = caller;
+      res.locals.authOk = true;
+      return next();
+    }
+    if (parseAdminKeys().length === 0) {
+      return next(new AppError('Admin sign-in is not configured on the server.', 503, { code: 'AUTH_NOT_CONFIGURED' }));
+    }
+    return next(new AppError('Sign in to continue.', 401, { code: 'AUTH_REQUIRED' }));
+  },
+];
 
 /** Mount before the /phase4 router: rate-limits failures, then checks the key. */
 export const phase4Auth = [

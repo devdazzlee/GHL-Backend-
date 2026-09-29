@@ -13,7 +13,8 @@ import testRoutes from './routes/test.routes.js';
 import setupRoutes from './routes/setup.routes.js';
 import scheduleRoutes from './routes/schedule.routes.js';
 import phase4Routes from './routes/phase4.routes.js';
-import { phase4Auth } from './middleware/phase4Auth.js';
+import { phase4Auth, requireAdmin } from './middleware/phase4Auth.js';
+import sessionRoutes from './routes/session.routes.js';
 
 export function createApp() {
   const app = express();
@@ -42,17 +43,20 @@ export function createApp() {
   app.use(requestLogger);
 
   app.use('/health', healthRoutes);
+  // Dashboard sign-in (public: login, current session, logout).
+  app.use('/session', sessionRoutes);
+  // Google OAuth: the callback is public, everything else needs sign-in (see auth.routes.js).
   app.use('/auth', authRoutes);
-  app.use('/locations', scheduleRoutes);
-  app.use('/locations', locationsRoutes);
-  app.use('/businesses', businessesRoutes);
-  app.use('/jobs', jobsRoutes);
+  // Dashboard-only routes: a signed-in session or an admin key.
+  app.use('/locations', ...requireAdmin, scheduleRoutes, locationsRoutes);
+  app.use('/businesses', ...requireAdmin, businessesRoutes);
+  app.use('/jobs', ...requireAdmin, jobsRoutes);
 
   if (env.NODE_ENV === 'development') {
-    app.use('/test', testRoutes);
+    app.use('/test', ...requireAdmin, testRoutes);
   }
 
-  app.use('/setup', setupRoutes);
+  app.use('/setup', ...requireAdmin, setupRoutes);
   // Everything under /phase4 needs a key except the public contact form endpoint.
   app.use('/phase4', ...phase4Auth, phase4Routes);
 
