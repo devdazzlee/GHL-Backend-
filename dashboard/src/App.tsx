@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AdminKeyPrompt } from './components/AdminKeyPrompt';
+import { RequireAuth } from './components/RequireAuth';
+import { AuthProvider } from './contexts/AuthContext';
 import { LocationsProvider } from './contexts/LocationsContext';
 import { Layout } from './components/Layout';
 import { AddBusinessPage } from './pages/AddBusinessPage';
@@ -11,6 +12,7 @@ import { FormSubmissionTestPage } from './pages/FormSubmissionTestPage';
 import { GeneratedSitesPage } from './pages/GeneratedSitesPage';
 import { GhlStatusPage } from './pages/GhlStatusPage';
 import { IndustrySchemasPage } from './pages/IndustrySchemasPage';
+import { LoginPage } from './pages/LoginPage';
 import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PostsPage } from './pages/PostsPage';
@@ -20,10 +22,18 @@ import { SocialPage } from './pages/SocialPage';
 export default function App() {
   return (
     <BrowserRouter>
-      <AdminKeyPrompt />
-      <LocationsProvider>
+      <AuthProvider>
         <Routes>
-          <Route element={<Layout />}>
+          <Route path="login" element={<LoginPage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <LocationsProvider>
+                  <Layout />
+                </LocationsProvider>
+              </RequireAuth>
+            }
+          >
             <Route index element={<OverviewPage />} />
             <Route path="add-business" element={<AddBusinessPage />} />
             <Route path="posts" element={<PostsPage />} />
@@ -41,7 +51,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </LocationsProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

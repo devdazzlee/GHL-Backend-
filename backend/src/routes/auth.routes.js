@@ -9,15 +9,19 @@ import {
   postRefreshToken,
 } from '../controllers/auth.controller.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { requireAdmin } from '../middleware/phase4Auth.js';
 
 const router = Router();
 
-router.get('/google/url', asyncHandler(getAuthUrl));
-router.get('/google/accounts', asyncHandler(getGoogleAccounts));
-router.get('/google/locations', asyncHandler(getGoogleLocations));
-router.get('/google/debug-accounts', asyncHandler(getGoogleDebugAccounts));
+// Google redirects the browser here after consent, so it stays public (it checks its own state).
 router.get('/google/callback', asyncHandler(getGoogleOAuthCallback));
-router.post('/google', asyncHandler(postGoogleAuth));
-router.post('/refresh/:locationId', asyncHandler(postRefreshToken));
+
+// Everything else is used from the dashboard: sign-in required.
+router.get('/google/url', requireAdmin, asyncHandler(getAuthUrl));
+router.get('/google/accounts', requireAdmin, asyncHandler(getGoogleAccounts));
+router.get('/google/locations', requireAdmin, asyncHandler(getGoogleLocations));
+router.get('/google/debug-accounts', requireAdmin, asyncHandler(getGoogleDebugAccounts));
+router.post('/google', requireAdmin, asyncHandler(postGoogleAuth));
+router.post('/refresh/:locationId', requireAdmin, asyncHandler(postRefreshToken));
 
 export default router;

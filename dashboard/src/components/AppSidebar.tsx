@@ -14,7 +14,9 @@ import {
   Send,
   SlidersHorizontal,
 } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 
 const navItems = [
@@ -52,6 +54,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onNavigate, className }: AppSidebarProps) {
+  const { user, signOut } = useAuth();
   return (
     <div className={cn('flex h-full flex-col', className)}>
       <div className="border-b border-slate-800 px-5 py-5">
@@ -101,6 +104,19 @@ export function AppSidebar({ onNavigate, className }: AppSidebarProps) {
           );
         })}
       </nav>
+      <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-4 py-3">
+        <p className="min-w-0 truncate text-xs text-slate-500">
+          Signed in as <span className="font-medium text-slate-300">{user?.name}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
+      </div>
 
       {/* <div className="border-t border-slate-800 px-4 py-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">

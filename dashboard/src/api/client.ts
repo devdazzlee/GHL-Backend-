@@ -1,6 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from '../config/config';
-import { ADMIN_KEY_REQUIRED_EVENT, clearAdminKey, getAdminKey } from '../lib/adminKey';
 
 export interface ApiErrorBody {
   success?: boolean;
@@ -8,9 +7,14 @@ export interface ApiErrorBody {
   message?: string;
 }
 
+/** Fired when the backend says "sign in required"; AuthContext sends the user to /login. */
+export const SESSION_EXPIRED_EVENT = 'peakwa:session-expired';
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 30000,
+  // The sign-in session is an httpOnly cookie set by the backend; send it with every call.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,10 +24,6 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
-    }
-    const adminKey = getAdminKey();
-    if (adminKey) {
-      config.headers.Authorization = `Bearer ${adminKey}`;
     }
     return config;
   },
@@ -48,9 +48,9 @@ api.interceptors.response.use(
       );
     }
     const code = error.response?.data?.error?.code;
-    if (error.response?.status === 401 && (code === 'AUTH_REQUIRED' || code === 'AUTH_INVALID')) {
-      clearAdminKey();
-      window.dispatchEvent(new Event(ADMIN_KEY_REQUIRED_EVENT));
+    const isSessionCall = String(error.config?.url ?? '').startsWith('/session/');
+    if (error.response?.status === 401 && code === 'AUTH_REQUIRED' && !isSessionCall) {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
     const message =
       error.response?.data?.error?.message ??
