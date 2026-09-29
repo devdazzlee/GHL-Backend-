@@ -21,6 +21,7 @@ import { sessionFromRequest } from '../services/adminSession.service.js';
 const RENDERER_GET_ROUTES = [
   /^\/indexable-sites\/?$/,
   /^\/site-redirects\/?$/,
+  /^\/custom-domains\/?$/,
   /^\/sites\/?$/,
   /^\/sites\/[^/]+\/?$/,
   /^\/sites\/[^/]+\/location-pages\/?$/,

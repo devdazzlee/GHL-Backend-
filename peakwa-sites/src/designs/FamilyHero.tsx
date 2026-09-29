@@ -17,7 +17,8 @@ type HeroProps = {
   site: GeneratedSite;
   theme: SiteTheme;
   design: DesignPreset;
-  slug: string;
+  /** Link prefix: "" on the site's own domain, "/{slug}" on the platform. */
+  base: string;
   heading: string;
   subheading: string;
   ctaButton: string;
@@ -25,14 +26,15 @@ type HeroProps = {
 };
 
 function CtaRow({
-  slug,
+  base,
   theme,
   phone,
   ctaButton,
   light = false,
   centered = false,
 }: {
-  slug: string;
+  /** Link prefix: "" on the site's own domain, "/{slug}" on the platform. */
+  base: string;
   theme: SiteTheme;
   phone?: string | null;
   ctaButton: string;
@@ -42,7 +44,7 @@ function CtaRow({
   return (
     <div className={clsx('mt-10 flex flex-col gap-3 sm:flex-row', centered && 'items-center justify-center')}>
       <Link
-        href={`/${slug}/contact`}
+        href={`${base}/contact`}
         className="inline-flex items-center justify-center px-8 py-4 text-sm font-bold"
         style={{
           backgroundColor: light ? '#fff' : theme.accentColor,
@@ -74,7 +76,7 @@ export function FamilyHero({
   site,
   theme,
   design,
-  slug,
+  base,
   heading,
   subheading,
   ctaButton,
@@ -113,7 +115,7 @@ export function FamilyHero({
               {heading}
             </h1>
             <p className="mt-6 max-w-xl text-lg text-white/85">{subheading}</p>
-            <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
+            <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
           </div>
           <div
             className="flex flex-col justify-end gap-4 px-4 py-10 sm:px-6 lg:px-8"
@@ -124,7 +126,7 @@ export function FamilyHero({
               Local {site.industry} experts ready for {site.city}.
             </p>
             <Link
-              href={`/${slug}/contact`}
+              href={`${base}/contact`}
               className="mt-2 inline-flex w-fit items-center justify-center bg-black px-6 py-3 text-sm font-bold uppercase text-white"
             >
               Request service
@@ -146,7 +148,7 @@ export function FamilyHero({
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/60">{label}</p>
           <h1 className="mt-6 text-4xl font-black uppercase leading-none md:text-6xl">{heading}</h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-white/80">{subheading}</p>
-          <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} light centered />
+          <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} light centered />
         </div>
         {heroImage ? (
           <div className="relative mx-auto mt-12 aspect-[21/9] max-w-5xl overflow-hidden border-4 border-white/20">
@@ -169,7 +171,7 @@ export function FamilyHero({
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-white/50">{label}</p>
             <h1 className="mt-4 text-5xl font-black leading-[0.95] md:text-6xl">{heading}</h1>
             <p className="mt-6 text-lg text-white/80">{subheading}</p>
-            <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
+            <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
           </div>
           <div className="relative min-h-[280px] overflow-hidden rounded-sm border border-white/20">
             {heroImage ? (
@@ -206,7 +208,7 @@ export function FamilyHero({
                 </li>
               ))}
             </ul>
-            <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} />
+            <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} />
           </div>
           <div className="relative min-h-[320px] overflow-hidden" style={{ borderRadius: 'var(--design-card-radius)' }}>
             {heroImage ? (
@@ -239,7 +241,7 @@ export function FamilyHero({
           <p className="mx-auto mt-8 max-w-xl text-lg leading-relaxed text-gray-600">{subheading}</p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              href={`/${slug}/contact`}
+              href={`${base}/contact`}
               className="inline-flex border border-gray-900 px-8 py-3 text-sm font-medium text-gray-900 transition hover:bg-gray-900 hover:text-white"
             >
               {ctaButton}
@@ -279,7 +281,7 @@ export function FamilyHero({
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/70">{label}</p>
           <h1 className="mt-4 max-w-3xl font-serif text-5xl leading-none md:text-7xl">{heading}</h1>
           <p className="mt-6 max-w-xl text-lg text-white/85">{subheading}</p>
-          <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
+          <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} light />
         </div>
       </section>
     );
@@ -295,7 +297,7 @@ export function FamilyHero({
           </h1>
           <p className="mt-8 text-base leading-8 text-stone-600">{subheading}</p>
           <Link
-            href={`/${slug}/contact`}
+            href={`${base}/contact`}
             className="mt-12 inline-block border-b border-stone-900 pb-1 text-sm font-medium tracking-wide text-stone-900"
           >
             {ctaButton} →
@@ -332,7 +334,7 @@ export function FamilyHero({
             <p className="mt-3 max-w-2xl text-base text-slate-600">{subheading}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
-                href={`/${slug}/contact`}
+                href={`${base}/contact`}
                 className="inline-flex items-center justify-center px-5 py-2.5 text-sm font-semibold text-white"
                 style={{
                   backgroundColor: theme.accentColor,
@@ -342,7 +344,7 @@ export function FamilyHero({
                 {ctaButton}
               </Link>
               <Link
-                href={`/${slug}/services`}
+                href={`${base}/services`}
                 className="inline-flex items-center justify-center border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800"
                 style={{ borderRadius: 'var(--design-button-radius)' }}
               >
@@ -412,7 +414,7 @@ export function FamilyHero({
               {heading}
             </h1>
             <p className="mt-6 max-w-md text-lg text-gray-600">{subheading}</p>
-            <CtaRow slug={slug} theme={theme} phone={site.phone} ctaButton={ctaButton} />
+            <CtaRow base={base} theme={theme} phone={site.phone} ctaButton={ctaButton} />
           </div>
           <div
             className={clsx(
@@ -497,7 +499,7 @@ export function FamilyHero({
           <h1 className="text-5xl font-black leading-tight tracking-tight md:text-7xl">{heading}</h1>
           <p className="mt-6 text-xl opacity-80 md:text-2xl">{subheading}</p>
           <CtaRow
-            slug={slug}
+            base={base}
             theme={theme}
             phone={site.phone}
             ctaButton={ctaButton}

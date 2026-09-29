@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { ArrowRight } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import clsx from 'clsx';
@@ -50,6 +51,7 @@ export default async function ServicesPage({ params }: PageProps) {
   const { slug } = await params;
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
 
   const images = await getSiteImages(slug);
   const content = parseJson<ServicesContent>(site.servicesContent, {});
@@ -107,7 +109,7 @@ export default async function ServicesPage({ params }: PageProps) {
             {services.map((service, i) => (
               <Link
                 key={`${service.title}-${i}`}
-                href={`/${slug}/services/${slugify(service.title || `service-${i}`)}`}
+                href={`${base}/services/${slugify(service.title || `service-${i}`)}`}
                 className="group flex flex-col overflow-hidden bg-white transition hover:-translate-y-1"
                 style={{
                   borderRadius: 'var(--design-card-radius)',
@@ -161,7 +163,7 @@ export default async function ServicesPage({ params }: PageProps) {
             {services.map((service, i) => (
               <Link
                 key={`${service.title}-${i}`}
-                href={`/${slug}/services/${slugify(service.title || `service-${i}`)}`}
+                href={`${base}/services/${slugify(service.title || `service-${i}`)}`}
                 className="group flex flex-col overflow-hidden bg-white transition hover:-translate-y-0.5 sm:flex-row"
                 style={{
                   borderRadius: 'var(--design-card-radius)',
@@ -266,7 +268,7 @@ export default async function ServicesPage({ params }: PageProps) {
                   </span>
                   <h2 className="mt-2 text-3xl font-bold text-gray-900">
                     <Link
-                      href={`/${slug}/services/${slugify(service.title || `service-${i}`)}`}
+                      href={`${base}/services/${slugify(service.title || `service-${i}`)}`}
                       className="transition hover:opacity-80"
                     >
                       {service.title}
@@ -275,7 +277,7 @@ export default async function ServicesPage({ params }: PageProps) {
                   <p className="mt-3 text-lg font-medium text-gray-700">{service.shortDescription}</p>
                   <p className="mt-4 leading-relaxed text-gray-600">{service.fullDescription}</p>
                   <Link
-                    href={`/${slug}/services/${slugify(service.title || `service-${i}`)}`}
+                    href={`${base}/services/${slugify(service.title || `service-${i}`)}`}
                     className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold transition hover:opacity-90"
                     style={{
                       backgroundColor: theme.accentColor,

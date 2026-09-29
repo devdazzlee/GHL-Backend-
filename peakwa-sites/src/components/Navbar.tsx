@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { joinBase, siteBasePath } from '@/src/lib/siteUrls';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, Menu, Phone, X } from 'lucide-react';
 import clsx from 'clsx';
@@ -38,7 +39,7 @@ export function Navbar({
   navStyle = 'solid',
 }: NavbarProps) {
   const pathname = usePathname();
-  const base = `/${site.slug}`;
+  const base = siteBasePath(site);
   const [open, setOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [locationsOpen, setLocationsOpen] = useState(false);
@@ -114,7 +115,7 @@ export function Navbar({
         return (
           <Link
             key={link.label}
-            href={`${base}${link.href}`}
+            href={joinBase(base, link.href)}
             className="text-sm font-medium transition-colors"
             style={{
               color: isActive(link.href) ? linkActive : linkColor,
@@ -213,7 +214,7 @@ export function Navbar({
                 <Menu className="h-5 w-5" style={{ color: brandColor }} />
               )}
             </button>
-            <Link href={base} className="mx-auto flex min-w-0 items-center gap-2">
+            <Link href={joinBase(base)} className="mx-auto flex min-w-0 items-center gap-2">
               {site.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- logo host is set per site in the dashboard
                 <img src={site.logoUrl} alt={`${site.businessName} logo`} className="h-9 w-auto max-w-[140px] shrink-0 object-contain" />
@@ -241,7 +242,7 @@ export function Navbar({
             phoneFirst && 'flex-row-reverse lg:flex-row',
           )}
         >
-          <Link href={base} className="flex min-w-0 items-center gap-2">
+          <Link href={joinBase(base)} className="flex min-w-0 items-center gap-2">
             {site.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- logo host is set per site in the dashboard
               <img src={site.logoUrl} alt={`${site.businessName} logo`} className="h-9 w-auto max-w-[140px] shrink-0 object-contain" />
@@ -287,7 +288,7 @@ export function Navbar({
             {navLinks.map((link) => (
               <Link
                 key={link.label}
-                href={`${base}${link.href}`}
+                href={joinBase(base, link.href)}
                 className="rounded-lg px-3 py-2 text-sm font-medium"
                 style={{ color: brandColor }}
                 onClick={() => setOpen(false)}

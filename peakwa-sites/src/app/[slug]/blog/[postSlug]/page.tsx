@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath, sitePath } from '@/src/lib/siteUrls';
 import { Clock } from 'lucide-react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import clsx from 'clsx';
@@ -75,7 +76,7 @@ async function lookupArticle(site: GeneratedSite, postSlug: string): Promise<Loo
     // Old /blog/{n} links point at the post that was n-th when the site was generated.
     if (numeric !== null) {
       const moved = blog.posts.find((p) => p.legacyIndex === numeric);
-      return moved ? { redirectTo: `/${site.slug}/blog/${moved.slug}` } : null;
+      return moved ? { redirectTo: sitePath(site, `/blog/${moved.slug}`) } : null;
     }
     const post = await getPublishedBlogPost(site.slug, postSlug);
     if (!post) return null;
@@ -142,11 +143,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   });
 }
 
-function InlineText({ parts, slug, linkColor }: { parts: InlinePart[]; slug: string; linkColor: string }) {
+function InlineText({ parts, slug, base, linkColor }: { parts: InlinePart[]; slug: string; base: string; linkColor: string }) {
   return (
     <>
       {parts.map((part, i) => {
-        const href = part.href ? resolveHref(part.href, slug) : null;
+        const href = part.href ? resolveHref(part.href, slug, base) : null;
         if (!href) return <span key={i}>{part.text}</span>;
         const external = /^https?:\/\//i.test(href);
         return external ? (
@@ -167,6 +168,7 @@ export default async function BlogPostPage({ params }: PageProps) {
   const { slug, postSlug } = await params;
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
 
   const found = await lookupArticle(site, postSlug);
   if (!found) notFound();
@@ -180,7 +182,7 @@ export default async function BlogPostPage({ params }: PageProps) {
     design.family === 'editorial' && 'font-medium',
     design.family !== 'bold' && design.family !== 'editorial' && 'font-bold',
   );
-  const breadcrumbItems = [{ label: 'Blog', href: `/${slug}/blog` }, { label: article.title || 'Article' }];
+  const breadcrumbItems = [{ label: 'Blog', href: `${base}/blog` }, { label: article.title || 'Article' }];
 
   return (
     <>
@@ -188,7 +190,6 @@ export default async function BlogPostPage({ params }: PageProps) {
         title={article.title}
         excerpt={article.excerpt}
         businessName={site.businessName}
-        slug={slug}
         postPath={article.path}
         site={site}
         faqs={article.faqs}
@@ -201,7 +202,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         <div className={contentMaxClass(design)}>
           <Breadcrumbs site={site} skipSchema items={breadcrumbItems} />
 
-          <Link href={`/${slug}/blog`} className="mb-6 inline-flex text-sm font-semibold" style={{ color: theme.accentColor }}>
+          <Link href={`${base}/blog`} className="mb-6 inline-flex text-sm font-semibold" style={{ color: theme.accentColor }}>
             ← Back to blog
           </Link>
 
@@ -257,7 +258,7 @@ export default async function BlogPostPage({ params }: PageProps) {
                     <ul key={i} className="mb-6 list-disc space-y-2 pl-6 text-lg leading-relaxed">
                       {block.items.map((item, j) => (
                         <li key={j}>
-                          <InlineText parts={item} slug={slug} linkColor={theme.accentColor} />
+                          <InlineText parts={item} slug={slug} base={base} linkColor={theme.accentColor} />
                         </li>
                       ))}
                     </ul>
@@ -285,7 +286,7 @@ export default async function BlogPostPage({ params }: PageProps) {
                         block.variant === 'closing' && 'mt-8 font-medium text-gray-800',
                       )}
                     >
-                      <InlineText parts={block.parts} slug={slug} linkColor={theme.accentColor} />
+                      <InlineText parts={block.parts} slug={slug} base={base} linkColor={theme.accentColor} />
                     </p>
                   );
               }
@@ -298,7 +299,7 @@ export default async function BlogPostPage({ params }: PageProps) {
               <h2 className={clsx('text-2xl text-gray-900', headingClass)}>Explore more</h2>
               <ul className="mt-4 space-y-2">
                 {article.links.map((link, i) => {
-                  const href = resolveHref(link.path, slug);
+                  const href = resolveHref(link.path, slug, base);
                   return href ? (
                     <li key={`il-${i}`}>
                       <Link href={href} className="text-lg font-semibold hover:underline" style={{ color: theme.accentColor }}>
@@ -309,7 +310,7 @@ export default async function BlogPostPage({ params }: PageProps) {
                 })}
                 {article.related.map((post) => (
                   <li key={`rel-${post.path}`}>
-                    <Link href={`/${slug}/blog/${post.path}`} className="text-lg font-semibold hover:underline" style={{ color: theme.accentColor }}>
+                    <Link href={`${base}/blog/${post.path}`} className="text-lg font-semibold hover:underline" style={{ color: theme.accentColor }}>
                       {post.title}
                     </Link>
                   </li>

@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
+import { PRODUCTION_FRONTEND_IP, PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
 
 dotenv.config();
 
@@ -47,6 +47,8 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',
   PEXELS_API_KEY: process.env.PEXELS_API_KEY ?? '',
   SITE_FRONTEND_URL: process.env.SITE_FRONTEND_URL?.trim() || PRODUCTION_SITE_FRONTEND_URL,
+  /** Custom domains are verified by checking their DNS points at this IP. */
+  FRONTEND_PUBLIC_IP: process.env.FRONTEND_PUBLIC_IP?.trim() || PRODUCTION_FRONTEND_IP,
   /** Shared with peakwa-sites; no default — cache refresh is skipped when unset. */
   REVALIDATE_SECRET: process.env.REVALIDATE_SECRET?.trim() ?? '',
   corsOrigins: parseCorsOrigins(),

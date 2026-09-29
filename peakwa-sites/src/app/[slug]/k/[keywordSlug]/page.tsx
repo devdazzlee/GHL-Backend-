@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { notFound } from 'next/navigation';
 import clsx from 'clsx';
 import { Breadcrumbs } from '@/src/components/Breadcrumbs';
@@ -31,6 +32,7 @@ export default async function KeywordLandingPage({ params }: PageProps) {
   const { slug, keywordSlug } = await params;
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
   const page = await getPublishedKeywordPage(slug, keywordSlug);
   if (!page) notFound();
 
@@ -41,7 +43,7 @@ export default async function KeywordLandingPage({ params }: PageProps) {
   const design = resolveDesignPreset(site.designVariant);
   const hero = heroBannerProps(design);
   const pad = sectionPadClass(design);
-  const cityHref = `/${slug}/${page.locationPage.slug}`;
+  const cityHref = `${base}/${page.locationPage.slug}`;
   const faqs = (content.faqs ?? []).filter(
     (f): f is { question: string; answer: string } => Boolean(f.question && f.answer),
   );

@@ -1,4 +1,4 @@
-import { SITE_BASE_URL } from '@/src/config';
+import { siteOriginFor, siteUrlFor } from '@/src/lib/siteLinks';
 import type { GeneratedSite } from '@/src/lib/types';
 
 /**
@@ -41,21 +41,22 @@ function JsonLdGraph({ nodes }: { nodes: Record<string, unknown>[] }) {
   );
 }
 
-export function businessSchemaId(slug: string): string {
-  return `${SITE_BASE_URL}/${slug}#business`;
+/** root: the site's home URL (siteUrlFor(site)). */
+export function businessSchemaId(root: string): string {
+  return `${root}#business`;
 }
 
-function websiteSchemaId(slug: string): string {
-  return `${SITE_BASE_URL}/${slug}#website`;
+function websiteSchemaId(root: string): string {
+  return `${root}#website`;
 }
 
 /** postPath: the post's slug, or its index for posts still stored with the site. */
-function articleSchemaId(slug: string, postPath: string | number): string {
-  return `${SITE_BASE_URL}/${slug}/blog/${postPath}#article`;
+function articleSchemaId(root: string, postPath: string | number): string {
+  return `${root}/blog/${postPath}#article`;
 }
 
-function serviceSchemaId(slug: string, serviceSlug: string): string {
-  return `${SITE_BASE_URL}/${slug}/services/${serviceSlug}#service`;
+function serviceSchemaId(root: string, serviceSlug: string): string {
+  return `${root}/services/${serviceSlug}#service`;
 }
 
 const ARTS_INDUSTRY_MARKERS = [
@@ -108,7 +109,7 @@ function buildLocalBusinessNode(
 ): Record<string, unknown> {
   const node: Record<string, unknown> = {
     '@type': resolveBusinessTypes(site.industry, site.description),
-    '@id': businessSchemaId(site.slug),
+    '@id': businessSchemaId(siteUrlFor(site)),
     name: site.businessName,
     description: site.description || '',
     address: {
@@ -119,7 +120,7 @@ function buildLocalBusinessNode(
     },
     telephone: site.phone || undefined,
     email: site.email || undefined,
-    url: `${SITE_BASE_URL}/${site.slug}`,
+    url: `${siteUrlFor(site)}`,
   };
   if (site.logoUrl) node.logo = site.logoUrl;
   if (imageUrl || site.logoUrl) node.image = imageUrl || site.logoUrl;
@@ -130,12 +131,12 @@ function buildBreadcrumbNode(
   site: GeneratedSite,
   items: Array<{ label: string; href?: string }>,
 ): Record<string, unknown> {
-  const baseUrl = `${SITE_BASE_URL}/${site.slug}`;
+  const baseUrl = `${siteUrlFor(site)}`;
   const list = [
     { name: 'Home', item: baseUrl },
     ...items.map((entry) => ({
       name: entry.label,
-      item: entry.href ? `${SITE_BASE_URL}${entry.href}` : undefined,
+      item: entry.href ? `${siteOriginFor(site)}${entry.href}` : undefined,
     })),
   ];
 
@@ -184,10 +185,10 @@ export function WebSiteSchema({ site }: { site: GeneratedSite }) {
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    '@id': websiteSchemaId(site.slug),
+    '@id': websiteSchemaId(siteUrlFor(site)),
     name: site.businessName,
-    url: `${SITE_BASE_URL}/${site.slug}`,
-    publisher: { '@id': businessSchemaId(site.slug) },
+    url: `${siteUrlFor(site)}`,
+    publisher: { '@id': businessSchemaId(siteUrlFor(site)) },
     inLanguage: 'en-US',
   };
 
@@ -278,11 +279,11 @@ function buildServiceDetailNode(
 ): Record<string, unknown> {
   return {
     '@type': 'Service',
-    '@id': serviceSchemaId(site.slug, serviceSlug),
+    '@id': serviceSchemaId(siteUrlFor(site), serviceSlug),
     name: serviceTitle,
     description,
-    url: `${SITE_BASE_URL}/${site.slug}/services/${serviceSlug}`,
-    provider: { '@id': businessSchemaId(site.slug) },
+    url: `${siteUrlFor(site)}/services/${serviceSlug}`,
+    provider: { '@id': businessSchemaId(siteUrlFor(site)) },
     areaServed: {
       '@type': 'City',
       name: site.city,
@@ -341,10 +342,10 @@ export function LocationAreaSchema({
   const schema: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': resolveBusinessTypes(site.industry, site.description),
-    '@id': `${SITE_BASE_URL}/${site.slug}/${locationSlug}#location`,
+    '@id': `${siteUrlFor(site)}/${locationSlug}#location`,
     name: `${site.businessName} — ${city}`,
-    url: `${SITE_BASE_URL}/${site.slug}/${locationSlug}`,
-    parentOrganization: { '@id': businessSchemaId(site.slug) },
+    url: `${siteUrlFor(site)}/${locationSlug}`,
+    parentOrganization: { '@id': businessSchemaId(siteUrlFor(site)) },
     areaServed: {
       '@type': 'City',
       name: city,
@@ -374,7 +375,7 @@ export function AboutPageJsonLd({
   description?: string;
   breadcrumbItems: Array<{ label: string; href?: string }>;
 }) {
-  const url = `${SITE_BASE_URL}/${site.slug}/about`;
+  const url = `${siteUrlFor(site)}/about`;
   return (
     <JsonLdGraph
       nodes={[
@@ -384,9 +385,9 @@ export function AboutPageJsonLd({
           url,
           name: `About ${site.businessName}`,
           description: description || site.description || '',
-          isPartOf: { '@id': websiteSchemaId(site.slug) },
-          about: { '@id': businessSchemaId(site.slug) },
-          mainEntity: { '@id': businessSchemaId(site.slug) },
+          isPartOf: { '@id': websiteSchemaId(siteUrlFor(site)) },
+          about: { '@id': businessSchemaId(siteUrlFor(site)) },
+          mainEntity: { '@id': businessSchemaId(siteUrlFor(site)) },
         },
         buildBreadcrumbNode(site, breadcrumbItems),
       ]}
@@ -406,7 +407,7 @@ export function ContactPageJsonLd({
   description?: string;
   breadcrumbItems: Array<{ label: string; href?: string }>;
 }) {
-  const url = `${SITE_BASE_URL}/${site.slug}/contact`;
+  const url = `${siteUrlFor(site)}/contact`;
   return (
     <JsonLdGraph
       nodes={[
@@ -416,9 +417,9 @@ export function ContactPageJsonLd({
           url,
           name: `Contact ${site.businessName}`,
           description: description || `Contact ${site.businessName} in ${site.city}, ${site.state}.`,
-          isPartOf: { '@id': websiteSchemaId(site.slug) },
-          about: { '@id': businessSchemaId(site.slug) },
-          mainEntity: { '@id': businessSchemaId(site.slug) },
+          isPartOf: { '@id': websiteSchemaId(siteUrlFor(site)) },
+          about: { '@id': businessSchemaId(siteUrlFor(site)) },
+          mainEntity: { '@id': businessSchemaId(siteUrlFor(site)) },
         },
         buildBreadcrumbNode(site, breadcrumbItems),
       ]}
@@ -438,7 +439,7 @@ export function BlogIndexJsonLd({
   description?: string;
   breadcrumbItems: Array<{ label: string; href?: string }>;
 }) {
-  const url = `${SITE_BASE_URL}/${site.slug}/blog`;
+  const url = `${siteUrlFor(site)}/blog`;
   return (
     <JsonLdGraph
       nodes={[
@@ -448,8 +449,8 @@ export function BlogIndexJsonLd({
           url,
           name: `${site.businessName} Blog`,
           description: description || `Articles and tips from ${site.businessName}.`,
-          isPartOf: { '@id': websiteSchemaId(site.slug) },
-          about: { '@id': businessSchemaId(site.slug) },
+          isPartOf: { '@id': websiteSchemaId(siteUrlFor(site)) },
+          about: { '@id': businessSchemaId(siteUrlFor(site)) },
         },
         buildBreadcrumbNode(site, breadcrumbItems),
       ]}
@@ -484,7 +485,7 @@ export function ArticleSchema({
     <JsonLd
       schema={{
         '@context': 'https://schema.org',
-        ...buildArticleNode(title, excerpt, businessName, slug, postPath),
+        ...buildArticleNode(title, excerpt, businessName, siteUrlFor({ slug }), postPath),
       }}
     />
   );
@@ -494,19 +495,20 @@ function buildArticleNode(
   title: string,
   excerpt: string,
   businessName: string,
-  slug: string,
+  /** The site's home URL (siteUrlFor(site)). */
+  root: string,
   postPath: string | number,
   imageUrl?: string | null,
   dates?: { published?: string | null; modified?: string | null },
 ): Record<string, unknown> {
-  const url = `${SITE_BASE_URL}/${slug}/blog/${postPath}`;
+  const url = `${root}/blog/${postPath}`;
   const node: Record<string, unknown> = {
     '@type': 'Article',
-    '@id': articleSchemaId(slug, postPath),
+    '@id': articleSchemaId(root, postPath),
     headline: title,
     description: excerpt,
     author: { '@type': 'Organization', name: businessName },
-    publisher: { '@id': businessSchemaId(slug) },
+    publisher: { '@id': businessSchemaId(root) },
     mainEntityOfPage: {
       '@type': 'WebPage',
       '@id': url,
@@ -524,7 +526,6 @@ export function BlogPostJsonLd({
   title,
   excerpt,
   businessName,
-  slug,
   postPath,
   site,
   faqs,
@@ -536,7 +537,6 @@ export function BlogPostJsonLd({
   title: string;
   excerpt: string;
   businessName: string;
-  slug: string;
   postPath: string | number;
   site: GeneratedSite;
   faqs?: { question: string; answer: string }[];
@@ -546,7 +546,7 @@ export function BlogPostJsonLd({
   dateModified?: string | null;
 }) {
   const nodes: Record<string, unknown>[] = [
-    buildArticleNode(title, excerpt, businessName, slug, postPath, imageUrl, { published: datePublished, modified: dateModified }),
+    buildArticleNode(title, excerpt, businessName, siteUrlFor(site), postPath, imageUrl, { published: datePublished, modified: dateModified }),
     buildBreadcrumbNode(site, breadcrumbItems),
   ];
   const faq = buildFaqNode(faqs ?? []);
