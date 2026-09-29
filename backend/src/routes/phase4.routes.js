@@ -84,6 +84,7 @@ import {
   serviceSlugOf,
   validateServiceTitle,
 } from '../services/serviceGeneration.service.js';
+import { regenerateService } from '../services/serviceRegeneration.service.js';
 const router = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1247,6 +1248,23 @@ router.post(
     return res.status(201).json({
       success: true,
       data: { site: serializeSiteWithTheme(site), service, generated: Boolean(generated) },
+      requestId: req.requestId,
+    });
+  }),
+);
+
+/**
+ * Regenerates ONE service (descriptions, icon, its own page). Hand edits to this service are
+ * replaced; every other hand edit on the site is kept.
+ */
+router.post(
+  '/sites/:id/services/:serviceSlug/regenerate',
+  asyncHandler(async (req, res) => {
+    const result = await regenerateService(req.params.id, req.params.serviceSlug);
+    const site = await getGeneratedSiteById(req.params.id);
+    return res.json({
+      success: true,
+      data: { site: serializeSiteWithTheme(site), service: result.service, handEditsReplaced: result.handEditsReplaced },
       requestId: req.requestId,
     });
   }),

@@ -673,6 +673,17 @@ export async function addPhase4Service(
   return response.data.site;
 }
 
+/** Rewrites one service (descriptions, icon, its own page); other hand edits are kept. */
+export async function regeneratePhase4Service(
+  id: string,
+  serviceSlug: string,
+): Promise<{ site: Phase4GeneratedSite; handEditsReplaced: number }> {
+  const { data: response } = await api.post<
+    ApiResponse<{ site: Phase4GeneratedSite; handEditsReplaced: number }>
+  >(`/phase4/sites/${id}/services/${encodeURIComponent(serviceSlug)}/regenerate`, {}, { timeout: 120000 });
+  return response.data;
+}
+
 export async function deletePhase4Service(
   id: string,
   serviceIndex: number,

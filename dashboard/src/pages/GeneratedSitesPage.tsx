@@ -6,6 +6,7 @@ import {
   previewRadiusTowns,
   type RadiusTown,
   addPhase4Service,
+  regeneratePhase4Service,
   deletePhase4Service,
   deletePhase4Site,
   fetchPhase4Site,
@@ -522,6 +523,7 @@ export function GeneratedSitesPage() {
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [serviceForm, setServiceForm] = useState<Phase4ServicePayload>(emptyServiceForm);
+  const [regeneratingService, setRegeneratingService] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
   const [deleteServiceIndex, setDeleteServiceIndex] = useState<number | null>(null);
   const [deletingService, setDeletingService] = useState(false);
@@ -953,6 +955,36 @@ export function GeneratedSitesPage() {
     }
   }
 
+  /** Same URL key the site uses for a service page. */
+  function serviceSlugOf(title: string) {
+    return title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  }
+
+  async function handleRegenerateService(title: string) {
+    if (!selectedSite || regeneratingService) return;
+    if (
+      !window.confirm(
+        `Regenerate "${title}"?\n\nIts short and full description, icon and its own page are rewritten. Hand edits you made to this service are replaced.\n\nEverything else stays as it is: the other services, the other pages and all your other edits.`,
+      )
+    ) {
+      return;
+    }
+    setRegeneratingService(title);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await regeneratePhase4Service(selectedSite.id, serviceSlugOf(title));
+      await refreshSelectedSite(result.site);
+      setSuccess(
+        `"${title}" regenerated${result.handEditsReplaced ? ` (${result.handEditsReplaced} hand edit${result.handEditsReplaced === 1 ? '' : 's'} to it replaced)` : ''}. Its own page is being rewritten and will be ready in about a minute.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate the service');
+    } finally {
+      setRegeneratingService(null);
+    }
+  }
+
   async function handleDeleteService() {
     if (!selectedSite || deleteServiceIndex == null || deletingService) return;
 
@@ -1220,16 +1252,34 @@ export function GeneratedSitesPage() {
                               {service.shortDescription || 'No description'}
                             </p>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                            onClick={() => setDeleteServiceIndex(index)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
-                          </Button>
+                          <div className="flex shrink-0 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={regeneratingService !== null || !service.title}
+                              onClick={() => void handleRegenerateService(service.title)}
+                              title="Rewrite this service's texts, icon and its own page"
+                            >
+                              {regeneratingService === service.title ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                              {regeneratingService === service.title ? 'Regenerating…' : 'Regenerate'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                              disabled={regeneratingService !== null}
+                              onClick={() => setDeleteServiceIndex(index)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
