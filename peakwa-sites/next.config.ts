@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Self-contained server build for the VPS pipeline only; Vercel builds are unchanged.
+  // Self-contained server build for the VPS pipeline (NEXT_OUTPUT_STANDALONE=1); local builds are unchanged.
   output: process.env.NEXT_OUTPUT_STANDALONE === '1' ? 'standalone' : undefined,
   experimental: {
     optimizePackageImports: ['lucide-react'],

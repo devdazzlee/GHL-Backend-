@@ -24,15 +24,8 @@ export function createApp() {
     app.set('trust proxy', 1);
   }
 
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    // Production: 'https://site.peakwa.com',
-    'https://ghl-backend-1qqr.vercel.app',
-    'https://ghl-backend-eopr.vercel.app',
-    process.env.DASHBOARD_URL,
-    process.env.SITE_URL,
-  ].filter(Boolean);
+  // The same list the Google-connect flow trusts (config/env.js); see .env.example.
+  const allowedOrigins = env.corsOrigins;
   // Live custom domains are allowed too (the contact form posts from the visitor's browser).
   const isAllowedSiteOrigin = createSiteOriginChecker();
 

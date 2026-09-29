@@ -16,6 +16,8 @@ const server = app.listen(env.PORT, () => {
       port: env.PORT,
       environment: env.NODE_ENV,
       logFile: logger.filePath,
+      // Browser origins allowed for CORS and the Google-connect return (plus live custom domains).
+      allowedOrigins: env.corsOrigins,
     }),
   );
   startScheduledJobs();

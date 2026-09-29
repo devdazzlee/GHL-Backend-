@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { PRODUCTION_FRONTEND_IP, PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
+import { PRODUCTION_DASHBOARD_URL, PRODUCTION_FRONTEND_IP, PRODUCTION_SITE_FRONTEND_URL } from './defaults.js';
 
 dotenv.config();
 
@@ -7,17 +7,39 @@ function truthyEnv(name) {
   return String(process.env[name] ?? '').toLowerCase() === 'true';
 }
 
-function parseCorsOrigins() {
-  const defaults = [
-    'https://ghl-backend-1qqr.vercel.app',
+/**
+ * Browser origins the API trusts: CORS for the dashboard and the sites' contact form,
+ * and where the Google-connect flow may send the browser back to. Built in: the
+ * production dashboard and sites, and local dev. DASHBOARD_URL, SITE_URL,
+ * SITE_FRONTEND_URL and CORS_ORIGINS (comma separated) add more. Live custom domains
+ * are added at runtime (siteDomains.service.js).
+ */
+export function parseCorsOrigins(source = process.env) {
+  const toOrigin = (value) => {
+    try {
+      return new URL(String(value).trim()).origin;
+    } catch {
+      return null;
+    }
+  };
+  const configured = [
+    source.DASHBOARD_URL,
+    source.SITE_URL,
+    source.SITE_FRONTEND_URL,
+    ...String(source.CORS_ORIGINS ?? '').split(','),
+  ];
+  const all = [
+    PRODUCTION_DASHBOARD_URL,
+    PRODUCTION_SITE_FRONTEND_URL,
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-  ];
-  const extra = String(process.env.CORS_ORIGINS ?? '')
-    .split(',')
-    .map((o) => o.trim().replace(/\/$/, ''))
+    'http://localhost:3000',
+    ...configured,
+  ]
+    .filter((value) => String(value ?? '').trim())
+    .map(toOrigin)
     .filter(Boolean);
-  return [...new Set([...defaults, ...extra])];
+  return [...new Set(all)];
 }
 
 export const env = {

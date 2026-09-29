@@ -2,7 +2,7 @@
 
 How Peakwa's three apps are built, deployed and rolled back, and where each one runs.
 
-> **Status (28 Sep 2026): mid-migration.** The two frontends are running on the frontend VPS, but **DNS has not been switched**. `site.peakwa.com` is still served by **Vercel**, and `dashboard.peakwa.com` does not exist in DNS yet (the dashboard is used at `ghl-backend-1qqr.vercel.app`). See [Cutover status](#cutover-status). Nothing here is finished until that section says so.
+> **Status (29 Sep 2026):** the frontend VPS is the **only production environment** for both frontends (`site.peakwa.com`, `dashboard.peakwa.com`). Vercel is no longer part of the setup: its automatic deploys are switched off in the repo (`vercel.json`, `git.deploymentEnabled: false`) and its two projects are being paused. See [Hosting status](#hosting-status).
 
 ---
 
@@ -27,12 +27,14 @@ How Peakwa's three apps are built, deployed and rolled back, and where each one 
 | App | Repo folder | Server | Hostname | Runs as | Listens on |
 |---|---|---|---|---|---|
 | Backend API | `backend/` | **187.77.19.146** (backend VPS) | `backend.peakwa.com` | PM2 process `gbp-backend` | `127.0.0.1:4000` (behind nginx) |
-| Admin dashboard | `dashboard/` | **169.58.4.58** (frontend VPS) | `dashboard.peakwa.com` *(not in DNS yet)* | nginx static files | nginx :80 (:443 after certificate) |
-| Generated sites (renderer) | `peakwa-sites/` | **169.58.4.58** (frontend VPS) | `site.peakwa.com` *(DNS still on Vercel)* | systemd `peakwa-sites.service` | `127.0.0.1:3100` (behind nginx) |
+| Admin dashboard | `dashboard/` | **169.58.4.58** (frontend VPS) | `dashboard.peakwa.com` | nginx static files | nginx :443 (HTTP redirects to HTTPS) |
+| Generated sites (renderer) | `peakwa-sites/` | **169.58.4.58** (frontend VPS) | `site.peakwa.com` (+ client custom domains) | systemd `peakwa-sites.service` | `127.0.0.1:3100` (behind nginx) |
 
 Both frontends call the backend at `https://backend.peakwa.com`; the backend stays where it is.
 
-Vercel still builds and serves both frontends on every push to `main` (projects `ghl-backend-eopr` = sites, `ghl-backend-1qqr` = dashboard). That continues until the cutover is done and Vercel is disconnected.
+The GitHub Actions pipelines below are the only way these apps are deployed. Vercel (projects `ghl-backend-eopr` = sites, `ghl-backend-1qqr` = dashboard) no longer builds on push; see [Hosting status](#hosting-status).
+
+The backend trusts these browser origins (CORS, and the Google-connect return): `https://dashboard.peakwa.com`, `https://site.peakwa.com` and local dev are built in; `DASHBOARD_URL`, `SITE_URL`, `SITE_FRONTEND_URL` and `CORS_ORIGINS` add more, and live client custom domains are added automatically. See `backend/.env.example`. The backend logs the full list at startup (`server_listen` → `allowedOrigins`).
 
 ### ⚠️ The frontend VPS is shared: do not touch other apps
 
@@ -106,7 +108,7 @@ Each workflow has its **own path filter and its own concurrency group**, so they
 - **Secrets:** the same four `FRONTEND_VPS_*` secrets.
 - **Concurrency:** group `deploy-peakwa-sites-vps`, never cancels a running deploy.
 - **Steps:**
-  1. **Build on the GitHub runner:** Node 22, `npm ci`, `npm test`, then `npm run build` with `NEXT_OUTPUT_STANDALONE=1`. That produces a self-contained Next.js server in `.next/standalone`. The flag is only set here, so Vercel builds are unaffected.
+  1. **Build on the GitHub runner:** Node 22, `npm ci`, `npm test`, then `npm run build` with `NEXT_OUTPUT_STANDALONE=1`. That produces a self-contained Next.js server in `.next/standalone`. The flag is only set here, so local builds are unaffected.
   2. Copy `.next/static` and `public/` into the standalone folder, package it as a tarball, and `scp` it to the server.
   3. Unpack into `/var/www/peakwa-sites/releases/<commit sha>/`, then switch `/var/www/peakwa-sites/current` → it.
   4. `systemctl restart peakwa-sites`.
@@ -202,25 +204,21 @@ pm2 restart gbp-backend --update-env && curl -fs http://127.0.0.1:4000/health
 
 Schema changes so far are additive only (new tables and nullable columns), so older code runs fine on the newer schema. Don't run `prisma db push` from an older commit: it would try to drop the newer tables and columns.
 
-### Vercel (until the cutover is finished)
-
-Vercel keeps every deployment. In the Vercel dashboard, open project `ghl-backend-eopr` (sites) or `ghl-backend-1qqr` (dashboard) → Deployments → pick an older one → **Promote to Production**.
-
 ---
 
-## Cutover status
+## Hosting status
 
-**As of 29 Sep 2026, both front ends are served from the frontend VPS.**
+**As of 29 Sep 2026, the frontend VPS (169.58.4.58) is the sole production environment for both front ends.**
 
 | Hostname | DNS | Status |
 |---|---|---|
-| `site.peakwa.com` | A `169.58.4.58` (switched 28 Sep 2026), TTL 300 | **Live on the VPS.** HTTPS certificate re-issued with the HTTP check (Certbot `--nginx`, auto-renewing). Post-switch comparison: every URL matched Vercel. Backend cache refreshes confirmed reaching the VPS. |
+| `site.peakwa.com` | A `169.58.4.58` (switched 28 Sep 2026), TTL 300 | **Live on the VPS.** HTTPS certificate via Certbot `--nginx` (HTTP check, auto-renewing). Backend cache refreshes reach the VPS. |
 | `dashboard.peakwa.com` | A `169.58.4.58` (added 28 Sep 2026) | **Live on the VPS.** HTTPS certificate issued (Certbot, auto-renewing). `DASHBOARD_URL` is set on the backend. |
 
 DNS for `peakwa.com` is at Hostinger (nameservers `ns1/ns2.dns-parking.com`).
 
-- **Rollback for `site.peakwa.com`:** delete the A record and re-add CNAME `site` → `0f23cae859592004.vercel-dns-017.com` (TTL 300). Vercel still deploys on every push, so it stays ready.
-- **Still to do, only after approval:** disconnect the Vercel projects from the repo, so pushes stop deploying there.
+- **If the frontend VPS has a serious problem:** the manual failover is a separate VPS kept by the owner (not Vercel). Deploy both frontends there the same way (see [Manual deploy](#manual-deploy-re-run-or-github-actions-is-down)), then point the `site` and `dashboard` A records at it (TTL is 300, so it takes about 5 minutes).
+- **Vercel:** automatic deploys are off in the repo: `vercel.json` in `dashboard/`, `peakwa-sites/` and the repo root sets `git.deploymentEnabled: false`. The two Vercel projects are paused, not deleted, until it's clear nothing needs them; delete them after that. The old `ghl-backend-1qqr.vercel.app` / `ghl-backend-eopr.vercel.app` addresses are not used anywhere and stop working when the projects are paused.
 
 ---
 
