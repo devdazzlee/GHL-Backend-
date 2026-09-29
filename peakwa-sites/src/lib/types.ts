@@ -41,6 +41,9 @@ export type GeneratedSite = {
   logoUrl?: string | null;
   /** Only true when switched on in the dashboard; otherwise noindex. */
   searchIndexable?: boolean | null;
+  /** The site's own domain; links move to it only once customDomainVerifiedAt is set. */
+  customDomain?: string | null;
+  customDomainVerifiedAt?: string | null;
 };
 
 export type LocationPage = {

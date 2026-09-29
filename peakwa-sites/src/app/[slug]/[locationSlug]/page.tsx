@@ -11,6 +11,7 @@ import { FAQSchema, LocationAreaSchema } from '@/src/components/SchemaMarkup';
 import { SeoContentSection } from '@/src/components/SeoContentSection';
 import { SectionWrapper } from '@/src/components/SectionWrapper';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { getLocationPages, getPublishedKeywordPages, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type SeoExtraContent, type ServicesContent } from '@/src/lib/content';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
@@ -103,6 +104,7 @@ export default async function LocationPage({ params }: PageProps) {
   if (RESERVED_LOCATION_SLUGS.has(locationSlug)) notFound();
   const site = await getSiteBySlug(slug);
   if (!site) notFound();
+  const base = siteBasePath(site);
 
   const pages = await getLocationPages(slug);
   const page = pages.find((p) => p.slug === locationSlug);
@@ -387,7 +389,7 @@ export default async function LocationPage({ params }: PageProps) {
               {keywordPages.map((k) => (
                 <li key={k.slug}>
                   <Link
-                    href={`/${slug}/k/${k.slug}`}
+                    href={`${base}/k/${k.slug}`}
                     className="font-medium underline"
                     style={{ color: theme.accentColor }}
                   >

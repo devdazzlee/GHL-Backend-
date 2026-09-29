@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { sitePath } from '@/src/lib/siteUrls';
 import { BreadcrumbListSchema } from '@/src/components/SchemaMarkup';
 import type { GeneratedSite } from '@/src/lib/types';
 import { getAccessibleForeground, resolveTheme } from '@/src/lib/theme';
@@ -13,7 +14,7 @@ type BreadcrumbsProps = {
 export function Breadcrumbs({ site, items, skipSchema = false }: BreadcrumbsProps) {
   const theme = resolveTheme(site);
   const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
-  const base = `/${site.slug}`;
+  const home = sitePath(site);
 
   return (
     <>
@@ -21,7 +22,7 @@ export function Breadcrumbs({ site, items, skipSchema = false }: BreadcrumbsProp
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-gray-500">
       <ol className="flex flex-wrap items-center gap-2">
         <li>
-          <Link href={base} style={{ color: accentOnWhite }} className="hover:underline">
+          <Link href={home} style={{ color: accentOnWhite }} className="hover:underline">
             Home
           </Link>
         </li>

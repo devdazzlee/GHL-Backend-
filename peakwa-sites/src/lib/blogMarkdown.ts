@@ -38,13 +38,19 @@ export function parseInline(text: string): InlinePart[] {
  * of this site ("services", "/blog/my-post" -> /{slug}/services, /{slug}/blog/my-post).
  * Returns null for targets that are not safe to link.
  */
-export function resolveHref(href: string, siteSlug: string): string | null {
+/**
+ * A link inside a post, as a site path. `base` is the site's link prefix: "/{slug}" on
+ * the platform (the default), "" on the site's own domain. Links written with the old
+ * /{slug}/ prefix keep working either way.
+ */
+export function resolveHref(href: string, siteSlug: string, base = `/${siteSlug}`): string | null {
   const value = href.trim();
   if (/^(https?:\/\/|mailto:|tel:)/i.test(value)) return value;
   if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
-  const path = value.replace(/^\/+/, '');
-  if (path.startsWith(`${siteSlug}/`)) return `/${path}`;
-  return `/${siteSlug}/${path}`;
+  let path = value.replace(/^\/+/, '');
+  if (path === siteSlug) path = '';
+  else if (path.startsWith(`${siteSlug}/`)) path = path.slice(siteSlug.length + 1);
+  return path ? `${base}/${path}` : base || '/';
 }
 
 export function parseBlogMarkdown(markdown: string): ArticleBlock[] {

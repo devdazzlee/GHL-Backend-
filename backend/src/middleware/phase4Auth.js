@@ -19,6 +19,7 @@ import { AppError } from '../utils/AppError.js';
 const RENDERER_GET_ROUTES = [
   /^\/indexable-sites\/?$/,
   /^\/site-redirects\/?$/,
+  /^\/custom-domains\/?$/,
   /^\/sites\/?$/,
   /^\/sites\/[^/]+\/?$/,
   /^\/sites\/[^/]+\/location-pages\/?$/,

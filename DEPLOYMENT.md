@@ -210,35 +210,108 @@ Vercel keeps every deployment. In the Vercel dashboard, open project `ghl-backen
 
 ## Cutover status
 
-**As of 28 Sep 2026, not started. Each DNS step needs explicit approval.**
+**As of 29 Sep 2026, both front ends are served from the frontend VPS.**
 
-| Hostname | Today | Target | Status |
-|---|---|---|---|
-| `site.peakwa.com` | CNAME `0f23cae859592004.vercel-dns-017.com.` (**Vercel**), TTL 14400 | A `169.58.4.58` | **Not switched.** The VPS copy passed a parity test: 291/291 URLs across all 14 sites matched Vercel. |
-| `dashboard.peakwa.com` | A `169.58.4.58` (added 28 Sep 2026) | same | **DNS live; HTTPS certificate issued (Certbot, auto-renewing).** Still needs `DASHBOARD_URL=https://dashboard.peakwa.com` in the backend `.env` (CORS). |
+| Hostname | DNS | Status |
+|---|---|---|
+| `site.peakwa.com` | A `169.58.4.58` (switched 28 Sep 2026), TTL 300 | **Live on the VPS.** HTTPS certificate re-issued with the HTTP check (Certbot `--nginx`, auto-renewing). Post-switch comparison: every URL matched Vercel. Backend cache refreshes confirmed reaching the VPS. |
+| `dashboard.peakwa.com` | A `169.58.4.58` (added 28 Sep 2026) | **Live on the VPS.** HTTPS certificate issued (Certbot, auto-renewing). `DASHBOARD_URL` is set on the backend. |
 
-DNS for `peakwa.com` is at Hostinger (nameservers `ns1/ns2.dns-parking.com`). Both new nginx sites on the VPS are **HTTP only** until certificates are issued.
+DNS for `peakwa.com` is at Hostinger (nameservers `ns1/ns2.dns-parking.com`).
 
-Planned steps, each only after approval:
+- **Rollback for `site.peakwa.com`:** delete the A record and re-add CNAME `site` → `0f23cae859592004.vercel-dns-017.com` (TTL 300). Vercel still deploys on every push, so it stays ready.
+- **Still to do, only after approval:** disconnect the Vercel projects from the repo, so pushes stop deploying there.
 
-1. **`site.peakwa.com`, lower the TTL:** at least 4 h ahead, lower the existing `site` CNAME TTL to 300.
-2. **`site.peakwa.com`, certificate before the switch:** issue a Let's Encrypt certificate using a DNS TXT record (`_acme-challenge.site`), so HTTPS works the moment traffic arrives.
-3. **`site.peakwa.com`, switch:** delete CNAME `site` → `0f23cae859592004.vercel-dns-017.com.`, add A `site` → `169.58.4.58` (TTL 300).
-4. **`site.peakwa.com`, after the switch:**
-   - re-issue the certificate with `certbot --nginx -d site.peakwa.com`, so renewals are automatic;
-   - re-run the parity test over HTTPS.
-5. **`site.peakwa.com`, rollback:** delete the A record and re-add CNAME `site` → `0f23cae859592004.vercel-dns-017.com` (TTL 300). Keep Vercel deployed for 1–2 weeks after the switch.
-6. **`dashboard.peakwa.com`:**
-   1. Add A `dashboard` → `169.58.4.58`. It's a new name, so nothing live is affected.
-   2. Run `certbot --nginx -d dashboard.peakwa.com`.
-   3. Set `DASHBOARD_URL` on the backend and restart it.
-7. **Once both are live and stable:** disconnect the Vercel projects from the repo, so pushes stop deploying there.
+---
 
-Until step 3, the backend's cache refreshes (`SITE_FRONTEND_URL=https://site.peakwa.com`) reach only Vercel, so the VPS copy of the sites can be up to 1 hour behind.
+## Custom domains (a client's own domain for their site)
+
+A site can be served at the client's own domain, e.g. `https://www.acmehvac.com`, instead of `https://site.peakwa.com/{slug}`.
+
+### How it works
+
+- **nginx:** each client domain has its own file on the frontend VPS, `/etc/nginx/sites-available/peakwa-domain-{domain}`, with its own Let's Encrypt certificate. The file sends the domain to the same renderer as `site.peakwa.com`.
+- **Which site a domain shows** is set in the dashboard: site → Business Info → **Custom domain**. The renderer maps the host to the site and serves `/about` from that site's `/about`.
+- **Nothing changes for visitors until the domain is verified.** Saving a domain only records it. Verify checks that:
+  - the domain's DNS points at `169.58.4.58`;
+  - `https://{domain}` answers for this site.
+- **Once verified:**
+  - links, canonical URLs, `sitemap.xml`, `robots.txt` and schema markup use the domain;
+  - `site.peakwa.com/{slug}/…` answers **301** to the same page on the domain, keeping the query string;
+  - the www / bare twin (`acmehvac.com` ↔ `www.acmehvac.com`) redirects to the chosen domain;
+  - the contact form is allowed to post from the domain (backend CORS).
+- **Per-domain files:** `https://{domain}/sitemap.xml` lists that site's pages on the domain, and `https://{domain}/robots.txt` points to it. The site is left out of the platform's own `site.peakwa.com/sitemap.xml`.
+- **Search indexing** is still controlled by the site's indexable switch. A domain doesn't turn it on.
+
+### One-time setup on the frontend VPS
+
+Install the script (it lives in this repo):
+
+```bash
+install -m 755 deploy/frontend-vps/peakwa-domain.sh /usr/local/sbin/peakwa-domain
+```
+
+What the script does:
+
+- It only creates, changes or deletes files named `peakwa-domain-*`, and certificates named after the client domain.
+- It runs `nginx -t` before every reload.
+- If the certificate can't be issued, it removes its own nginx file again, so nothing is left half set up.
+
+### Per client: adding a domain
+
+1. **Dashboard:** open the site → **Business Info** → **Custom domain**, enter the domain (e.g. `www.acmehvac.com`) and click **Save domain**. The panel then shows the exact DNS records to add.
+2. **Client's DNS**, at their registrar or DNS host:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | A | `www` | `169.58.4.58` |
+   | A | `@` (the bare domain) | `169.58.4.58` |
+
+   - Delete any other A, **AAAA** or CNAME records for those two names.
+   - If the DNS is on Cloudflare, set both records to **DNS only** (grey cloud), not proxied.
+   - If the domain has CAA records, one must allow `letsencrypt.org`.
+   - For a subdomain such as `shop.acmehvac.com`, only its own A record is needed.
+3. **Wait for DNS to spread:** usually minutes, up to a few hours. To check it:
+
+   ```bash
+   dig +short A www.acmehvac.com @1.1.1.1
+   ```
+
+   It must answer `169.58.4.58` only.
+4. **On the frontend VPS:**
+
+   ```bash
+   peakwa-domain add www.acmehvac.com
+   ```
+
+   What it does:
+   - It checks DNS first and stops, with the reason, if the domain isn't pointed yet.
+   - It includes the twin (`acmehvac.com`) when its DNS is pointed too.
+   - It writes the nginx file, gets the certificate (HTTP check, auto-renewing) and turns on HTTP→HTTPS.
+   - `--dry-run` shows what it would do without changing anything.
+5. **Dashboard: Custom domain → Verify.**
+   - When both checks pass, the site moves to `https://www.acmehvac.com` within a minute.
+   - If a check fails, the panel says why, e.g. "A records point at …", "remove the AAAA records" or "no certificate yet".
+6. **Check:**
+   - `https://www.acmehvac.com` shows the site;
+   - `https://site.peakwa.com/{slug}` redirects there;
+   - the contact form sends.
+
+### Removing or changing a domain
+
+- **Dashboard:** Custom domain → **Remove**, or enter a new domain and click **Change domain**. The site moves back to `site.peakwa.com/{slug}` immediately. A new domain starts unverified, so repeat steps 2–5.
+- **VPS:** `peakwa-domain remove www.acmehvac.com` deletes the nginx file and the certificate.
+- **List what's set up:** `peakwa-domain list` shows each domain with its certificate's expiry.
+
+### Troubleshooting
+
+- **The domain shows "Site Not Found":** the dashboard doesn't have this domain for any active site, or the renderer hasn't picked it up yet (up to 1 minute).
+- **Verify says DNS is wrong but `dig` looks right:** DNS caches can take a while; try again later. Verify uses public resolvers (1.1.1.1, 8.8.8.8).
+- **Certificate errors in `peakwa-domain add`:** see `/var/log/letsencrypt/letsencrypt.log`. The usual causes are DNS not pointed yet, a proxied Cloudflare record, an AAAA record elsewhere, or CAA blocking Let's Encrypt.
 
 ---
 
 ## Related
 
 - `GENERATOR-GAPS-REPORT.md` (outside this repo) has the feature history and acceptance results.
-- Custom domains for generated sites (planned) will use this frontend VPS: nginx + Certbot per client domain.
+- `deploy/frontend-vps/peakwa-domain.sh`: add, remove and list client domains on the frontend VPS.

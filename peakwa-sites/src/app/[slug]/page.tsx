@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { siteBasePath } from '@/src/lib/siteUrls';
 import { notFound } from 'next/navigation';
 import { buildPageMetadata } from '@/src/lib/seo';
 import { ArrowRight, MapPin, Quote, Star } from 'lucide-react';
@@ -225,6 +226,7 @@ export default async function HomePage({ params }: PageProps) {
     getLocationPages(slug),
   ]);
   if (!site) notFound();
+  const base = siteBasePath(site);
   const content = parseJson<HomeContent>(site.homeContent, {});
   const theme = resolveTheme(site);
   const accentOnWhite = getAccessibleForeground(theme.accentColor, '#FFFFFF');
@@ -265,7 +267,7 @@ export default async function HomePage({ params }: PageProps) {
         site={site}
         theme={theme}
         design={design}
-        slug={slug}
+        base={base}
         heading={hero.heading || `Welcome to ${site.businessName}`}
         subheading={hero.subheading || `Serving ${site.city}, ${site.state} with pride.`}
         ctaButton={hero.ctaButton || 'Get Started'}
@@ -353,7 +355,7 @@ export default async function HomePage({ params }: PageProps) {
               </ul> */}
 
               <Link
-                href={`/${slug}/about`}
+                href={`${base}/about`}
                 className="mt-10 inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-semibold shadow-md transition hover:opacity-90"
                 style={{
                   backgroundColor: theme.primaryColor,
@@ -429,7 +431,7 @@ export default async function HomePage({ params }: PageProps) {
             return (
               <Link
                 key={`${service.title}-${i}`}
-                href={`/${slug}/services/${serviceSlug}`}
+                href={`${base}/services/${serviceSlug}`}
                 className={clsx(
                   'group overflow-hidden bg-white transition duration-300 hover:-translate-y-1',
                   isListLayout
@@ -513,7 +515,7 @@ export default async function HomePage({ params }: PageProps) {
         </div>
         <div className="mt-12 text-center">
           <Link
-            href={`/${slug}/services`}
+            href={`${base}/services`}
             className="inline-flex items-center justify-center gap-2 rounded-full border-2 px-8 py-3 text-sm font-semibold transition hover:opacity-80"
             style={{ borderColor: theme.accentColor, color: accentOnWhite }}
           >
@@ -702,7 +704,7 @@ export default async function HomePage({ params }: PageProps) {
                 return (
                   <Link
                     key={location.id}
-                    href={`/${slug}/${location.slug}`}
+                    href={`${base}/${location.slug}`}
                     className="group overflow-hidden bg-white transition duration-300 hover:-translate-y-1"
                     style={cardChromeStyle()}
                   >

@@ -130,7 +130,7 @@ export default async function DesignPreviewPage({ params }: PageProps) {
         site={site}
         theme={theme}
         design={design}
-        slug={site.slug}
+        base={`/${site.slug}`}
         heading={hero.heading || `Welcome to ${site.businessName}`}
         subheading={hero.subheading || ''}
         ctaButton={hero.ctaButton || 'Get Started'}

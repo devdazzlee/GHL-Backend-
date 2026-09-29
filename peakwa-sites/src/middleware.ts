@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config';
 import { robotsHeaderForPath } from '@/src/lib/indexing';
 import { buildRedirectMap, redirectTarget, type RedirectMap } from '@/src/lib/redirects';
+import { fetchDomainMap } from '@/src/lib/domainMap';
+import { buildDomainMap, normalizeHost, routeRequest, type DomainMap } from '@/src/lib/domainRouting';
 
 /** How long the indexable-site list is reused before refetching. */
 const INDEXABLE_TTL_MS = 5 * 60 * 1000;
@@ -57,27 +59,63 @@ async function getRedirectMap(): Promise<RedirectMap> {
   }
 }
 
+/** Custom domains change rarely; a new or verified one takes effect within a minute. */
+const DOMAINS_TTL_MS = 60 * 1000;
+
+let domainCache: { map: DomainMap; fetchedAt: number } | null = null;
+
+/** Every active site's custom domain. Any failure keeps the last good list (or none). */
+async function getDomainMap(): Promise<DomainMap> {
+  if (domainCache && Date.now() - domainCache.fetchedAt < DOMAINS_TTL_MS) return domainCache.map;
+  const map = await fetchDomainMap();
+  if (!map) return domainCache?.map ?? buildDomainMap([]);
+  domainCache = { map, fetchedAt: Date.now() };
+  return map;
+}
+
+/** The platform's own root robots.txt and sitemap.xml (a custom domain gets its site's). */
+const PLATFORM_ROOT_FILES = new Set(['/robots.txt', '/sitemap.xml']);
+
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+  const { pathname, search } = request.nextUrl;
+  const host = normalizeHost(request.headers.get('host'));
+  const domains = await getDomainMap();
 
-  // A site whose address changed: every old URL moves permanently to the same page.
-  const target = redirectTarget(pathname, request.nextUrl.search, await getRedirectMap());
-  if (target) return NextResponse.redirect(new URL(target, request.url), 301);
+  const route = routeRequest(host, pathname, search, domains);
+  if (route?.kind === 'redirect') {
+    // A path on the same host: keep the visitor on https://{their domain}.
+    const location = route.location.startsWith('/') ? `https://${host}${route.location}` : route.location;
+    return NextResponse.redirect(location, 301);
+  }
 
+  if (!route) {
+    if (PLATFORM_ROOT_FILES.has(pathname)) return NextResponse.next();
+
+    // A site whose address changed: every old URL moves permanently to the same page
+    // (straight to the site's own domain when that is live).
+    const target = redirectTarget(pathname, search, await getRedirectMap());
+    if (target) {
+      const onward = routeRequest(host, new URL(target, request.url).pathname, search, domains);
+      return NextResponse.redirect(onward?.kind === 'redirect' ? onward.location : new URL(target, request.url), 301);
+    }
+  }
+
+  // The path the page is rendered from: /{slug}/... on a custom domain too.
+  const sitePath = route?.kind === 'rewrite' ? route.path : pathname;
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-pathname', pathname);
+  requestHeaders.set('x-pathname', sitePath);
 
-  const response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  const response =
+    route?.kind === 'rewrite'
+      ? NextResponse.rewrite(new URL(`${route.path}${search}`, request.url), { request: { headers: requestHeaders } })
+      : NextResponse.next({ request: { headers: requestHeaders } });
 
   const slugs = await getIndexableSlugs();
-  response.headers.set('X-Robots-Tag', robotsHeaderForPath(pathname, slugs, IS_SEARCH_INDEXABLE));
+  response.headers.set('X-Robots-Tag', robotsHeaderForPath(sitePath, slugs, IS_SEARCH_INDEXABLE));
   return response;
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|robots.txt|sitemap.xml|api/).*)',
-  ],
+  // robots.txt and sitemap.xml pass through here: on a custom domain they are the site's own.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|api/).*)'],
 };

@@ -286,6 +286,13 @@ model GeneratedSite {
   /// Hand edits to page text, re-applied after regeneration and undoable.
   /// JSON { [page]: { [path]: { value, original, anchor, editedAt } } }
   contentEdits    String?        @db.Text
+  /// The site's own domain, e.g. "www.acmehvac.com" (lowercase host only). Null = the site
+  /// lives at site.peakwa.com/{slug} only. One site per domain is enforced by the domain
+  /// service (a unique constraint here would make the deploy's `prisma db push` stop).
+  customDomain    String?
+  /// When the domain was verified: its DNS points at the frontend server and HTTPS answers for
+  /// this site. Null = not live yet, so links, canonical URLs and redirects stay on site.peakwa.com.
+  customDomainVerifiedAt DateTime?
   locationPages   LocationPage[]
   keywordPages    KeywordPage[]
   blogPosts       BlogPost[]
@@ -294,6 +301,8 @@ model GeneratedSite {
   servicePages    ServicePage[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+
+  @@index([customDomain])
 }
 
 model ServicePage {
