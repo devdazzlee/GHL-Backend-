@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { API_URL, IS_SEARCH_INDEXABLE } from '@/src/config/config';
+import { lookupResult } from '@/src/lib/backendLookup';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { ALL_SITES_CACHE_TAG, siteCacheTag } from '@/src/lib/siteCache';
 import type {
@@ -55,12 +56,20 @@ async function fetchApi(url: string, init: RequestInit): Promise<Response | null
   return null;
 }
 
+/**
+ * For lookups whose absence shows a 404 page: null only when the backend says 404,
+ * and a throw when it cannot answer (see lookupResult).
+ */
+async function fetchLookup(url: string, init: RequestInit): Promise<Response | null> {
+  return lookupResult(url, await fetchApi(url, init));
+}
+
 export const getSiteBySlug = cache(async (slug: string): Promise<GeneratedSite | null> => {
-  const res = await fetchApi(
+  const res = await fetchLookup(
     `${API_URL}/phase4/sites/${encodeURIComponent(slug)}`,
     fetchInit({ revalidate: 3600, tags: [ALL_SITES_CACHE_TAG, siteCacheTag(slug)] }),
   );
-  if (!res || !res.ok) return null;
+  if (!res) return null;
   const data = await res.json();
   const site = (data.data?.site as GeneratedSite | undefined) || null;
   // Public storefront only serves ACTIVE sites; INACTIVE/PENDING must not open.
@@ -96,44 +105,42 @@ export async function getAllSites(): Promise<GeneratedSite[]> {
   return getAllActiveSites();
 }
 
+/** City pages; an unknown city is a 404, so a backend failure throws rather than returning []. */
 export async function getLocationPages(slug: string): Promise<LocationPage[]> {
-  try {
-    const res = await fetchApi(
-      `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/location-pages`,
-      fetchInit({
-        revalidate: 3600,
-        tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-locations`],
-      }),
-    );
-    if (!res || !res.ok) return [];
-    const data = await res.json();
-    return data.data?.pages || [];
-  } catch {
-    return [];
-  }
+  const res = await fetchLookup(
+    `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/location-pages`,
+    fetchInit({
+      revalidate: 3600,
+      tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-locations`],
+    }),
+  );
+  if (!res) return [];
+  const data = await res.json();
+  return data.data?.pages || [];
 }
 
 /**
- * Blog state and published posts. If the backend cannot answer (or is older than
- * this renderer), fall back to the posts stored with the site so the blog never disappears.
+ * Blog state and published posts. If the backend is older than this renderer (404),
+ * fall back to the posts stored with the site so the blog never disappears. If it
+ * cannot answer, throw, so a post URL is never cached as a 404.
  */
 export async function getPublishedBlog(slug: string): Promise<PublishedBlog> {
   const fallback: PublishedBlog = { enabled: true, managed: false, posts: [] };
-  const res = await fetchApi(
+  const res = await fetchLookup(
     `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-blog`,
     fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-blog`] }),
   );
-  if (!res || !res.ok) return fallback;
+  if (!res) return fallback;
   const data = await res.json().catch(() => null);
   return data?.data && typeof data.data.enabled === 'boolean' ? (data.data as PublishedBlog) : fallback;
 }
 
 export async function getPublishedBlogPost(slug: string, postSlug: string): Promise<PublishedBlogPost | null> {
-  const res = await fetchApi(
+  const res = await fetchLookup(
     `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-blog/${encodeURIComponent(postSlug)}`,
     fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-blog`] }),
   );
-  if (!res || !res.ok) return null;
+  if (!res) return null;
   const data = await res.json().catch(() => null);
   return data?.data?.post ?? null;
 }
@@ -166,11 +173,11 @@ export async function getPublishedKeywordPage(
   slug: string,
   keywordSlug: string,
 ): Promise<KeywordPageDetail | null> {
-  const res = await fetchApi(
+  const res = await fetchLookup(
     `${API_URL}/phase4/sites/${encodeURIComponent(slug)}/published-keyword-pages/${encodeURIComponent(keywordSlug)}`,
     fetchInit({ revalidate: 3600, tags: [siteCacheTag(slug), `${siteCacheTag(slug)}-keywords`] }),
   );
-  if (!res || !res.ok) return null;
+  if (!res) return null;
   const data = await res.json();
   return data.data?.page ?? null;
 }
