@@ -78,6 +78,12 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
 
 import { getOrGenerateServicePage } from '../services/servicePage.service.js';
+import {
+  generateServiceContent,
+  normalizeServiceTitle,
+  serviceSlugOf,
+  validateServiceTitle,
+} from '../services/serviceGeneration.service.js';
 const router = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1171,28 +1177,21 @@ function parseSiteJsonContent(value, label) {
   }
 }
 
+/**
+ * Adds a service. Only `title` is required: any of shortDescription, fullDescription
+ * and icon left empty is written by the AI for this site (same prompts as a new site's
+ * services). The service's own page is generated in the background right away.
+ */
 router.post(
   '/sites/:id/services',
   asyncHandler(async (req, res) => {
     const existing = await getGeneratedSiteById(req.params.id);
 
-    const title = String(req.body?.title ?? '').trim();
-    const shortDescription = String(req.body?.shortDescription ?? '').trim();
-    const fullDescription = String(req.body?.fullDescription ?? '').trim();
-    const icon = String(req.body?.icon ?? '').trim();
-
+    const title = normalizeServiceTitle(req.body?.title);
     if (!title) {
       throw new AppError('Field `title` is required.', 400, { code: 'INVALID_BODY' });
     }
-    if (!shortDescription) {
-      throw new AppError('Field `shortDescription` is required.', 400, { code: 'INVALID_BODY' });
-    }
-    if (!fullDescription) {
-      throw new AppError('Field `fullDescription` is required.', 400, { code: 'INVALID_BODY' });
-    }
-    if (!icon) {
-      throw new AppError('Field `icon` is required.', 400, { code: 'INVALID_BODY' });
-    }
+    validateServiceTitle(title);
 
     const servicesContent = parseSiteJsonContent(existing.servicesContent, 'servicesContent');
     const homeContent = parseSiteJsonContent(existing.homeContent, 'homeContent');
@@ -1200,16 +1199,30 @@ router.post(
     const services = Array.isArray(servicesContent.services) ? [...servicesContent.services] : [];
     const homeServices = Array.isArray(homeContent.services) ? [...homeContent.services] : [];
 
-    services.push({
+    const newSlug = serviceSlugOf(title);
+    if (services.some((s) => serviceSlugOf(s?.title) === newSlug)) {
+      throw new AppError(`This site already has a service called "${title}".`, 409, { code: 'SERVICE_EXISTS' });
+    }
+
+    const given = {
+      shortDescription: String(req.body?.shortDescription ?? '').trim(),
+      fullDescription: String(req.body?.fullDescription ?? '').trim(),
+      icon: String(req.body?.icon ?? '').trim(),
+    };
+    const generated =
+      given.shortDescription && given.fullDescription && given.icon ? null : await generateServiceContent(existing, title);
+    const service = {
       title,
-      shortDescription,
-      fullDescription,
-      icon,
-    });
+      shortDescription: given.shortDescription || generated.shortDescription,
+      fullDescription: given.fullDescription || generated.fullDescription,
+      icon: given.icon || generated.icon,
+    };
+
+    services.push(service);
     homeServices.push({
       title,
-      description: shortDescription,
-      icon,
+      description: service.shortDescription,
+      icon: service.icon,
     });
 
     const site = await prisma.generatedSite.update({
@@ -1222,9 +1235,18 @@ router.post(
     });
     await revalidateSiteFrontendCache(site.slug);
 
+    // Build the service's own page now, so its first visitor doesn't wait for it.
+    void getOrGenerateServicePage(site, newSlug, service).then(
+      () => revalidateSiteFrontendCache(site.slug),
+      (error) =>
+        console.warn(
+          JSON.stringify({ event: 'service_page_pregenerate_failed', siteId: site.id, serviceSlug: newSlug, error: error?.message }),
+        ),
+    );
+
     return res.status(201).json({
       success: true,
-      data: { site: serializeSiteWithTheme(site) },
+      data: { site: serializeSiteWithTheme(site), service, generated: Boolean(generated) },
       requestId: req.requestId,
     });
   }),

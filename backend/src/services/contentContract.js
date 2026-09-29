@@ -281,6 +281,12 @@ export function validateUnit(unitId, content) {
       push('intro', countWords(content?.intro ?? content?.text), floor);
       break;
     }
+    case 'services.catalogEntry': {
+      // One service's catalog line (added from its name in the dashboard): 30-45 words + an icon.
+      push('shortDescription', countWords(content?.shortDescription), 25);
+      if (!String(content?.icon ?? '').trim()) issues.push({ field: 'icon', words: 0, minimum: 1 });
+      break;
+    }
     case 'services.fullDescription': {
       push(
         'fullDescription',
