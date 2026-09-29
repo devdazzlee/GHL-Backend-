@@ -7,6 +7,7 @@ import {
   type RadiusTown,
   addPhase4Service,
   deletePhase4LocationPage,
+  regeneratePhase4Service,
   deletePhase4Service,
   deletePhase4Site,
   fetchPhase4Site,
@@ -525,6 +526,7 @@ export function GeneratedSitesPage() {
   const [serviceForm, setServiceForm] = useState<Phase4ServicePayload>(emptyServiceForm);
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
+  const [regeneratingService, setRegeneratingService] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
   const [deleteServiceIndex, setDeleteServiceIndex] = useState<number | null>(null);
   const [deletingService, setDeletingService] = useState(false);
@@ -940,13 +942,49 @@ export function GeneratedSitesPage() {
         icon: serviceForm.icon.trim(),
       });
       await refreshSelectedSite(updated);
+      const addedTitle = serviceForm.title.trim();
+      const wroteText = !serviceForm.shortDescription.trim() || !serviceForm.fullDescription.trim() || !serviceForm.icon.trim();
       setServiceForm(emptyServiceForm);
       setServiceDialogOpen(false);
-      setSuccess('Service added.');
+      setSuccess(
+        wroteText
+          ? `Service "${addedTitle}" added with AI-written text. Its own page is being written now and will be ready in about a minute.`
+          : 'Service added.',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add service');
     } finally {
       setSavingService(false);
+    }
+  }
+
+  /** Same URL key the site uses for a service page. */
+  function serviceSlugOf(title: string) {
+    return title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  }
+
+  async function handleRegenerateService(title: string) {
+    if (!selectedSite || regeneratingService) return;
+    if (
+      !window.confirm(
+        `Regenerate "${title}"?\n\nIts short and full description, icon and its own page are rewritten. Hand edits you made to this service are replaced.\n\nEverything else stays as it is: the other services, the other pages and all your other edits.`,
+      )
+    ) {
+      return;
+    }
+    setRegeneratingService(title);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await regeneratePhase4Service(selectedSite.id, serviceSlugOf(title));
+      await refreshSelectedSite(result.site);
+      setSuccess(
+        `"${title}" regenerated${result.handEditsReplaced ? ` (${result.handEditsReplaced} hand edit${result.handEditsReplaced === 1 ? '' : 's'} to it replaced)` : ''}. Its own page is being rewritten and will be ready in about a minute.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate the service');
+    } finally {
+      setRegeneratingService(null);
     }
   }
 
@@ -1243,16 +1281,34 @@ export function GeneratedSitesPage() {
                               {service.shortDescription || 'No description'}
                             </p>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                            onClick={() => setDeleteServiceIndex(index)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
-                          </Button>
+                          <div className="flex shrink-0 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={regeneratingService !== null || !service.title}
+                              onClick={() => void handleRegenerateService(service.title)}
+                              title="Rewrite this service's texts, icon and its own page"
+                            >
+                              {regeneratingService === service.title ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                              {regeneratingService === service.title ? 'Regenerating…' : 'Regenerate'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                              disabled={regeneratingService !== null}
+                              onClick={() => setDeleteServiceIndex(index)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1429,15 +1485,17 @@ export function GeneratedSitesPage() {
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
             <DialogDescription>
-              Add a service to this site. It will appear on the services and home pages.
+              Type just the service name: its descriptions, icon and its own page are written for this business
+              automatically. It appears on the home and services pages, the menu and the footer.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => void handleAddService(e)} className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Title</label>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Service name</label>
               <input
                 type="text"
                 required
+                autoFocus
                 value={serviceForm.title}
                 onChange={(e) => setServiceForm((f) => ({ ...f, title: e.target.value }))}
                 className={inputClass}
@@ -1445,12 +1503,16 @@ export function GeneratedSitesPage() {
                 disabled={savingService}
               />
             </div>
+            <details className="rounded-lg border border-slate-800 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-slate-400">
+                Write the text myself (optional; anything left empty is written for you)
+              </summary>
+              <div className="mt-3 space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 Short Description
               </label>
               <textarea
-                required
                 rows={2}
                 value={serviceForm.shortDescription}
                 onChange={(e) =>
@@ -1466,7 +1528,6 @@ export function GeneratedSitesPage() {
                 Full Description
               </label>
               <textarea
-                required
                 rows={4}
                 value={serviceForm.fullDescription}
                 onChange={(e) =>
@@ -1481,7 +1542,6 @@ export function GeneratedSitesPage() {
               <label className="mb-1 block text-xs font-medium text-slate-500">Icon</label>
               <input
                 type="text"
-                required
                 value={serviceForm.icon}
                 onChange={(e) => setServiceForm((f) => ({ ...f, icon: e.target.value }))}
                 className={inputClass}
@@ -1489,6 +1549,11 @@ export function GeneratedSitesPage() {
                 disabled={savingService}
               />
             </div>
+              </div>
+            </details>
+            {savingService ? (
+              <p className="text-xs text-slate-400">Writing the service for this business… this takes about 10-20 seconds.</p>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -1498,9 +1563,11 @@ export function GeneratedSitesPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={savingService}>
+              <Button type="submit" disabled={savingService || !serviceForm.title.trim()}>
                 {savingService ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save
+                {serviceForm.shortDescription.trim() && serviceForm.fullDescription.trim() && serviceForm.icon.trim()
+                  ? 'Add service'
+                  : 'Generate & add service'}
               </Button>
             </div>
           </form>

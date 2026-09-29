@@ -675,11 +675,24 @@ export async function addPhase4Service(
   id: string,
   data: Phase4ServicePayload,
 ): Promise<Phase4GeneratedSite> {
+  // Empty descriptions / icon are written by the AI on the server (about 10-20 seconds).
   const { data: response } = await api.post<ApiResponse<{ site: Phase4GeneratedSite }>>(
     `/phase4/sites/${id}/services`,
     data,
+    { timeout: 120000 },
   );
   return response.data.site;
+}
+
+/** Rewrites one service (descriptions, icon, its own page); other hand edits are kept. */
+export async function regeneratePhase4Service(
+  id: string,
+  serviceSlug: string,
+): Promise<{ site: Phase4GeneratedSite; handEditsReplaced: number }> {
+  const { data: response } = await api.post<
+    ApiResponse<{ site: Phase4GeneratedSite; handEditsReplaced: number }>
+  >(`/phase4/sites/${id}/services/${encodeURIComponent(serviceSlug)}/regenerate`, {}, { timeout: 120000 });
+  return response.data;
 }
 
 export async function deletePhase4Service(
