@@ -554,6 +554,17 @@ export async function fetchPhase4Sites(): Promise<Phase4GeneratedSite[]> {
   return sites;
 }
 
+/** Deletes a city page and its keyword pages; its URL then answers 404. */
+export async function deletePhase4LocationPage(
+  siteId: string,
+  id: string,
+): Promise<{ city: string; slug: string; keywordPagesDeleted: number }> {
+  const { data } = await api.delete<ApiResponse<{ city: string; slug: string; keywordPagesDeleted: number }>>(
+    `/phase4/sites/${siteId}/location-pages/${id}`,
+  );
+  return data.data;
+}
+
 export async function fetchPhase4Site(slug: string): Promise<Phase4GeneratedSite> {
   const { data } = await api.get<ApiResponse<{ site: Phase4GeneratedSite }>>(
     `/phase4/sites/${encodeURIComponent(slug)}`,

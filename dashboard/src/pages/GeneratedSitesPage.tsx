@@ -6,6 +6,7 @@ import {
   previewRadiusTowns,
   type RadiusTown,
   addPhase4Service,
+  deletePhase4LocationPage,
   deletePhase4Service,
   deletePhase4Site,
   fetchPhase4Site,
@@ -522,6 +523,8 @@ export function GeneratedSitesPage() {
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [serviceForm, setServiceForm] = useState<Phase4ServicePayload>(emptyServiceForm);
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
   const [deleteServiceIndex, setDeleteServiceIndex] = useState<number | null>(null);
   const [deletingService, setDeletingService] = useState(false);
@@ -947,6 +950,32 @@ export function GeneratedSitesPage() {
     }
   }
 
+  async function handleDeleteLocationPage(page: Phase4LocationPage) {
+    if (!selectedSite || deletingLocationId) return;
+    if (
+      !window.confirm(
+        `Delete the city page for ${page.city}?\n\nIts address (/${selectedSite.slug}/${page.slug}) will stop working (it answers "not found"), and any keyword pages for ${page.city} are deleted too. This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingLocationId(page.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await deletePhase4LocationPage(selectedSite.id, page.id);
+      if (editingLocationId === page.id) setEditingLocationId(null);
+      await refreshSelectedSite();
+      setSuccess(
+        `City page for ${result.city} deleted${result.keywordPagesDeleted ? `, with ${result.keywordPagesDeleted} keyword page${result.keywordPagesDeleted === 1 ? '' : 's'}` : ''}.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete the city page');
+    } finally {
+      setDeletingLocationId(null);
+    }
+  }
+
   async function handleDeleteService() {
     if (!selectedSite || deleteServiceIndex == null || deletingService) return;
 
@@ -1271,11 +1300,39 @@ export function GeneratedSitesPage() {
                               </p>
                               <p className="font-mono text-xs text-slate-500">{page.slug}</p>
                             </div>
-                            <span className="text-xs text-slate-500">
-                              {formatDate(page.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500">{formatDate(page.createdAt)}</span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingLocationId((id) => (id === page.id ? null : page.id))}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                {editingLocationId === page.id ? 'Done' : 'Edit'}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                                disabled={deletingLocationId !== null}
+                                onClick={() => void handleDeleteLocationPage(page)}
+                              >
+                                {deletingLocationId === page.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                                Delete
+                              </Button>
+                            </div>
                           </div>
-                          <PageContentPanel content={page.content} />
+                          {editingLocationId === page.id ? (
+                            <PageTextEditor siteId={selectedSite.id} page={`location:${page.id}`} />
+                          ) : (
+                            <PageContentPanel content={page.content} />
+                          )}
                         </div>
                       ))}
                     </div>
