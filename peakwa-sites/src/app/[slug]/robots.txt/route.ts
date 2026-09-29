@@ -14,7 +14,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { slug } = await params;
   const base = SITE_BASE_URL.replace(/\/$/, '');
   const sitemap = `${base}/${slug}/sitemap.xml`;
-  const site = await getSiteBySlug(slug);
+  // If the backend can't answer, fail closed (Disallow) rather than erroring.
+  const site = await getSiteBySlug(slug).catch(() => null);
 
   if (!siteIsIndexable(site)) {
     const body = ['User-Agent: *', 'Disallow: /', `Host: ${base}`, ''].join('\n');
