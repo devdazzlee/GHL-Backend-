@@ -12,6 +12,7 @@ import {
   type KeywordPageContent,
 } from '../api/keywordPages';
 import { Button } from './ui/button';
+import { PageTextEditor } from './PageTextEditor';
 
 const MAX_PER_REQUEST = 10;
 const POLL_MS = 4000;
@@ -51,6 +52,7 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<KeywordGenerationResult | null>(null);
   const [preview, setPreview] = useState<KeywordPage | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [progress, setProgress] = useState<KeywordJob | null>(null);
 
@@ -180,10 +182,8 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
       ) : (
         <div className="space-y-2">
           {pages.map((p) => (
-            <div
-              key={p.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 p-3"
-            >
+            <div key={p.id} className="rounded-lg border border-slate-800 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-medium text-white">
                   {p.keyword} · {p.locationPage.city}
@@ -196,6 +196,14 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => setPreview(p)}>
                   Preview
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditingId((id) => (id === p.id ? null : p.id))}
+                >
+                  {editingId === p.id ? 'Done' : 'Edit'}
                 </Button>
                 {p.status === 'PUBLISHED' ? (
                   <>
@@ -242,6 +250,12 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
                   Delete
                 </Button>
               </div>
+            </div>
+            {editingId === p.id ? (
+              <div className="mt-3 border-t border-slate-800 pt-3">
+                <PageTextEditor siteId={siteId} page={`keyword:${p.id}`} />
+              </div>
+            ) : null}
             </div>
           ))}
         </div>

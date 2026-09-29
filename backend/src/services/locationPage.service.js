@@ -641,3 +641,39 @@ export async function previewRadiusTowns(siteId, { zipCode, radiusMiles }) {
     })),
   };
 }
+
+/**
+ * Deletes one city page. Its keyword pages go with it (they are about that city;
+ * the database cascades them). Their recorded hand edits are cleared too.
+ */
+export async function deleteLocationPage(siteId, id) {
+  const page = await prisma.locationPage.findFirst({
+    where: { id, siteId },
+    select: {
+      id: true,
+      city: true,
+      slug: true,
+      keywordPages: { select: { id: true } },
+      site: { select: { contentEdits: true } },
+    },
+  });
+  if (!page) throw new AppError('City page not found.', 404, { code: 'LOCATION_PAGE_NOT_FOUND' });
+
+  await prisma.locationPage.delete({ where: { id: page.id } });
+
+  let edits = {};
+  try {
+    edits = JSON.parse(page.site.contentEdits || '{}');
+  } catch {
+    edits = {};
+  }
+  const stale = [`location:${page.id}`, ...page.keywordPages.map((k) => `keyword:${k.id}`)].filter((key) => key in edits);
+  if (stale.length > 0) {
+    for (const key of stale) delete edits[key];
+    await prisma.generatedSite.update({ where: { id: siteId }, data: { contentEdits: JSON.stringify(edits) } });
+  }
+  console.info(
+    JSON.stringify({ event: 'location_page_deleted', siteId, slug: page.slug, keywordPagesDeleted: page.keywordPages.length }),
+  );
+  return { city: page.city, slug: page.slug, keywordPagesDeleted: page.keywordPages.length };
+}

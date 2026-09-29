@@ -15,6 +15,7 @@ import { createSmtpTransporter } from '../services/email.service.js';
 import { scheduleSiteFinalization } from '../services/sitePostProcessing.service.js';
 import { revalidateSiteFrontendCache } from '../services/siteRevalidation.service.js';
 import {
+  deleteLocationPage,
   generateLocationPages,
   generateLocationPagesByRadius,
   previewRadiusTowns,
@@ -1396,6 +1397,16 @@ router.post(
     const page = await setKeywordPagePublished(req.params.siteId, req.params.id, false);
     await revalidateSiteById(req.params.siteId);
     return res.json({ success: true, data: { page }, requestId: req.requestId });
+  }),
+);
+
+/** Deletes a city page (and its keyword pages); its URL then answers 404. */
+router.delete(
+  '/sites/:siteId/location-pages/:id',
+  asyncHandler(async (req, res) => {
+    const result = await deleteLocationPage(req.params.siteId, req.params.id);
+    await revalidateSiteById(req.params.siteId);
+    return res.json({ success: true, data: { deleted: true, ...result }, requestId: req.requestId });
   }),
 );
 
