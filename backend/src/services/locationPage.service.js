@@ -3,7 +3,7 @@ import prisma from '../database/client.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { getSchemaForIndustry } from './industrySchema.service.js';
-import { fetchPexelsImageByQuery } from './pexels.service.js';
+import { chooseCityPagePhoto } from './cityPhoto.service.js';
 import { buildSeoRequirements, ensureSeoMetadata } from './seoMetadata.service.js';
 import {
   FLOORS,
@@ -288,70 +288,9 @@ async function generateLocationPageContent(businessData, location, site, systemP
   return content;
 }
 
-async function generateLocationImageQuery(location, site) {
-  const fallback = `${location.city} ${location.state} neighborhood`;
-  const apiKey = env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return fallback;
-  }
-
-  try {
-    const client = new OpenAI({ apiKey });
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.7,
-      max_tokens: 30,
-      messages: [
-        {
-          role: 'system',
-          content: 'Return only a 3-5 word Pexels photo search query. Nothing else.',
-        },
-        {
-          role: 'user',
-          content:
-            `Best Pexels photo search query for ${location.city}, ${location.county} County, ${location.state}. ` +
-            `Show a recognizable scenic or neighborhood view of this specific city, suitable for a ${site.industry} business location page. ` +
-            'Include the city name. Return only 3-5 words.',
-        },
-      ],
-    });
-
-    const query = completion.choices?.[0]?.message?.content?.trim();
-    if (!query) {
-      return fallback;
-    }
-
-    return query.replace(/^["']|["']$/g, '');
-  } catch {
-    return fallback;
-  }
-}
-
+/** A photo of this town, else a generic one with no place in it, else none (see cityPhoto.service.js). */
 export async function generateLocationPageImage(location, site) {
-  const query = await generateLocationImageQuery(location, site);
-
-  console.info(
-    JSON.stringify({
-      event: 'location_image_query',
-      city: location.city,
-      county: location.county,
-      state: location.state,
-      query,
-    }),
-  );
-
-  const imageUrl = await fetchPexelsImageByQuery(query);
-  if (!imageUrl) {
-    console.warn(
-      JSON.stringify({
-        event: 'location_image_empty',
-        city: location.city,
-        query,
-      }),
-    );
-  }
-
-  return imageUrl;
+  return chooseCityPagePhoto(location, site);
 }
 
 /**

@@ -3,6 +3,7 @@ import { API_URL } from '@/src/config/config';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { siteCacheTag } from '@/src/lib/siteCache';
 import type { PhotoDescriptions } from '@/src/lib/photoAlt';
+import { parseStockVideo, type StockVideoData } from '@/src/lib/stockVideo';
 
 /** Mobile LCP source width passed to Pexels before Next.js optimization. */
 export const HERO_MOBILE_WIDTH = 750;
@@ -73,6 +74,8 @@ export type SiteImages = {
   blog: (string | null)[];
   /** Pexels' description of each stock photo on the site (alt text), by photo number. */
   photos: PhotoDescriptions;
+  /** The home page stock clip, or null (none picked yet, or removed in the dashboard). */
+  video: StockVideoData | null;
 };
 
 const emptyImages: SiteImages = {
@@ -81,6 +84,7 @@ const emptyImages: SiteImages = {
   services: [],
   blog: [],
   photos: {},
+  video: null,
 };
 
 export async function getSiteImages(slug: string): Promise<SiteImages> {
@@ -100,6 +104,7 @@ export async function getSiteImages(slug: string): Promise<SiteImages> {
       services: Array.isArray(images.services) ? images.services : [],
       blog: Array.isArray(images.blog) ? images.blog : [],
       photos: photos && typeof photos === 'object' && !Array.isArray(photos) ? photos : {},
+      video: parseStockVideo(data.data?.video),
     };
   } catch {
     return emptyImages;

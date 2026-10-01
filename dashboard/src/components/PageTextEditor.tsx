@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
@@ -300,11 +301,14 @@ export function PageTabPanel({
   page,
   slotIds,
   searchHint,
+  extra,
 }: {
   siteId: string;
   page: string;
   slotIds?: string[];
   searchHint?: string;
+  /** Shown between the images and the text (e.g. the home page video). */
+  extra?: ReactNode;
 }) {
   const hasImages = Boolean(slotIds?.length);
   const [imagesReady, setImagesReady] = useState(!hasImages);
@@ -335,6 +339,7 @@ export function PageTabPanel({
             onSettled={() => setImagesReady(true)}
           />
         ) : null}
+        {extra}
         <PageTextEditor
           siteId={siteId}
           page={page}

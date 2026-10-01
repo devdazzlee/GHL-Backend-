@@ -57,6 +57,8 @@ import { CustomDomainPanel } from '../components/CustomDomainPanel';
 import { OpeningHoursEditor } from '../components/OpeningHoursEditor';
 import { PageTextEditor, PageTabPanel, ServicesEditor } from '../components/PageTextEditor';
 import { PhotoCreditsPanel } from '../components/PhotoCreditsPanel';
+import { SiteVideoPanel } from '../components/SiteVideoPanel';
+import { CityPhotosPanel } from '../components/CityPhotosPanel';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
@@ -1465,6 +1467,9 @@ export function GeneratedSitesPage() {
                 </div>
               ) : activeTab === 'locations' ? (
                 <div className="flex min-h-[420px] flex-col">
+                  <div className="mb-5">
+                    <CityPhotosPanel key={selectedSite.id} siteId={selectedSite.id} />
+                  </div>
                   <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-sm font-medium text-white">
@@ -1657,6 +1662,8 @@ export function GeneratedSitesPage() {
                       : [activeTab === 'home' ? 'hero' : 'about']
                   }
                   searchHint={selectedSite.industry}
+
+                  extra={activeTab === 'home' ? <SiteVideoPanel siteId={selectedSite.id} /> : undefined}
                 />
               ) : (
                 <PageContentPanel
