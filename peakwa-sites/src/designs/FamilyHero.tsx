@@ -260,7 +260,7 @@ export function FamilyHero({
               mode === 'editorial-wide-image' ? 'aspect-[21/9] max-w-6xl' : 'aspect-[16/9] max-w-5xl',
             )}
           >
-            <SiteImage src={heroImage} alt={site.businessName} fill className="object-cover" sizes="1024px" />
+            <SiteImage src={heroImage} alt="" fill className="object-cover" sizes="1024px" />
           </div>
         ) : null}
       </section>
@@ -426,7 +426,7 @@ export function FamilyHero({
             {heroImage ? (
               <SiteImage
                 src={heroImage}
-                alt={site.businessName}
+                alt=""
                 fill
                 className="object-cover object-center"
                 sizes="50vw"
@@ -471,7 +471,7 @@ export function FamilyHero({
       {heroImage ? (
         <>
           <div className="absolute inset-0">
-            <LcpHeroImage src={heroImage} alt={`${site.businessName} hero background`} />
+            <LcpHeroImage src={heroImage} alt="" />
           </div>
           <div
             className="absolute inset-0"

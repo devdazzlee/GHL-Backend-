@@ -16,6 +16,12 @@ export interface PageEditorData {
   services?: Array<{ index: number; title: string; slug: string }>;
 }
 
+/** Who took a stock photo. PENDING while it is still being looked up on Pexels. */
+export type PhotoCredit =
+  | { status: 'KNOWN'; pexelsId: string; photographer: string | null; photographerUrl: string | null; pageUrl: string | null; alt: string | null }
+  | { status: 'PENDING' | 'UNAVAILABLE'; pexelsId: string }
+  | { status: 'NOT_STOCK' };
+
 export interface ImageSlot {
   id: string;
   kind: 'hero' | 'about' | 'service' | 'blog';
@@ -23,6 +29,14 @@ export interface ImageSlot {
   title: string | null;
   url: string | null;
   source: 'AUTO' | 'PICKED' | 'UPLOAD' | null;
+  credit: PhotoCredit | null;
+}
+
+export interface SitePhoto {
+  url: string;
+  /** Where the photo appears, e.g. "Home page banner", "City page: Aurora". */
+  usedIn: string[];
+  credit: PhotoCredit;
 }
 
 export interface StockPhoto {
@@ -30,6 +44,8 @@ export interface StockPhoto {
   thumb: string;
   alt: string;
   photographer: string;
+  photographerUrl: string | null;
+  pageUrl: string | null;
 }
 
 type Envelope<T> = { data: T };
@@ -80,6 +96,13 @@ export async function setImageSlot(
     image,
   );
   return data.data.slot;
+}
+
+export async function listPhotoCredits(siteId: string): Promise<{ photos: SitePhoto[]; pending: number }> {
+  const { data } = await api.get<Envelope<{ photos: SitePhoto[]; pending: number }>>(`/phase4/sites/${siteId}/photo-credits`, {
+    timeout: 120000,
+  });
+  return data.data;
 }
 
 export async function searchStockPhotos(siteId: string, query: string): Promise<StockPhoto[]> {

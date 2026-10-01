@@ -16,6 +16,7 @@ import { getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type ServicesContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { photoAlt } from '@/src/lib/photoAlt';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset, servicesGridClass } from '@/src/designs/presets';
@@ -121,7 +122,7 @@ export default async function ServicesPage({ params }: PageProps) {
                   {images.services[i] ? (
                     <SiteImage
                       src={images.services[i]!}
-                      alt={`${service.title} service`}
+                      alt={photoAlt(images.services[i], images.photos, service.title)}
                       fill
                       className="object-cover object-center transition group-hover:scale-105"
                       sizes="(max-width: 1024px) 100vw, 33vw"
@@ -176,7 +177,7 @@ export default async function ServicesPage({ params }: PageProps) {
                   {images.services[i] ? (
                     <SiteImage
                       src={images.services[i]!}
-                      alt={`${service.title} service`}
+                      alt={photoAlt(images.services[i], images.photos, service.title)}
                       fill
                       className="object-cover object-center"
                       sizes="224px"
@@ -232,7 +233,7 @@ export default async function ServicesPage({ params }: PageProps) {
                     <div className="relative aspect-[4/3] w-full">
                       <SiteImage
                         src={images.services[i]!}
-                        alt={`${service.title} service`}
+                        alt={photoAlt(images.services[i], images.photos, service.title)}
                         fill
                         className="object-cover object-center"
                         sizes="(max-width: 1024px) 100vw, 50vw"

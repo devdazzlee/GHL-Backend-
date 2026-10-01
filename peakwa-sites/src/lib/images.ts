@@ -2,6 +2,7 @@ import { cache } from 'react';
 import { API_URL } from '@/src/config/config';
 import { rendererHeaders } from '@/src/lib/rendererAuth';
 import { siteCacheTag } from '@/src/lib/siteCache';
+import type { PhotoDescriptions } from '@/src/lib/photoAlt';
 
 /** Mobile LCP source width passed to Pexels before Next.js optimization. */
 export const HERO_MOBILE_WIDTH = 750;
@@ -70,6 +71,8 @@ export type SiteImages = {
   about: string | null;
   services: (string | null)[];
   blog: (string | null)[];
+  /** Pexels' description of each stock photo on the site (alt text), by photo number. */
+  photos: PhotoDescriptions;
 };
 
 const emptyImages: SiteImages = {
@@ -77,6 +80,7 @@ const emptyImages: SiteImages = {
   about: null,
   services: [],
   blog: [],
+  photos: {},
 };
 
 export async function getSiteImages(slug: string): Promise<SiteImages> {
@@ -89,11 +93,13 @@ export async function getSiteImages(slug: string): Promise<SiteImages> {
     const data = await res.json();
     const images = data.data?.images;
     if (!images) return emptyImages;
+    const photos = data.data?.photos;
     return {
       hero: images.hero ?? null,
       about: images.about ?? null,
       services: Array.isArray(images.services) ? images.services : [],
       blog: Array.isArray(images.blog) ? images.blog : [],
+      photos: photos && typeof photos === 'object' && !Array.isArray(photos) ? photos : {},
     };
   } catch {
     return emptyImages;
