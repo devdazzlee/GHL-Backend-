@@ -264,6 +264,9 @@ model GeneratedSite {
   instagramUrl    String?
   websiteUrl      String?
   logoUrl         String?
+  /// Opening hours shown in the business schema. JSON: {"open24x7": true} or
+  /// {"days": {"Monday": {"opens": "08:00", "closes": "18:00"}, ...}} (missing day = closed). Null = not set.
+  openingHours    String?        @db.Text
   /// Search engines may index this site only when true. Null/false = noindex
   /// (the default for every generated site, including demo businesses).
   searchIndexable Boolean?

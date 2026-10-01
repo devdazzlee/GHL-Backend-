@@ -1,4 +1,5 @@
 import { siteOriginFor, siteUrlFor } from '@/src/lib/siteLinks';
+import { businessExtras } from '@/src/lib/businessSchema';
 import type { GeneratedSite } from '@/src/lib/types';
 
 /**
@@ -106,7 +107,11 @@ export function resolveBusinessTypes(
 function buildLocalBusinessNode(
   site: GeneratedSite,
   imageUrl?: string | null,
+  cities: Array<{ city: string; state?: string | null }> = [],
 ): Record<string, unknown> {
+  // Street, ZIP, map pin, social profiles, hours, service area and contact point,
+  // each only when the site has that data (lib/businessSchema.ts).
+  const { streetAddress, postalCode, ...extras } = businessExtras(site, cities);
   const node: Record<string, unknown> = {
     '@type': resolveBusinessTypes(site.industry, site.description),
     '@id': businessSchemaId(siteUrlFor(site)),
@@ -114,13 +119,16 @@ function buildLocalBusinessNode(
     description: site.description || '',
     address: {
       '@type': 'PostalAddress',
+      ...(streetAddress ? { streetAddress } : {}),
       addressLocality: site.city,
       addressRegion: site.state,
+      ...(postalCode ? { postalCode } : {}),
       addressCountry: 'US',
     },
     telephone: site.phone || undefined,
     email: site.email || undefined,
     url: `${siteUrlFor(site)}`,
+    ...extras,
   };
   if (site.logoUrl) node.logo = site.logoUrl;
   if (imageUrl || site.logoUrl) node.image = imageUrl || site.logoUrl;
@@ -166,15 +174,18 @@ function buildFaqNode(faqs: { question: string; answer: string }[]): Record<stri
 export function LocalBusinessSchema({
   site,
   imageUrl,
+  cities = [],
 }: {
   site: GeneratedSite;
   imageUrl?: string | null;
+  /** The site's city pages, listed as the area served. */
+  cities?: Array<{ city: string; state?: string | null }>;
 }) {
   return (
     <JsonLd
       schema={{
         '@context': 'https://schema.org',
-        ...buildLocalBusinessNode(site, imageUrl),
+        ...buildLocalBusinessNode(site, imageUrl, cities),
       }}
     />
   );

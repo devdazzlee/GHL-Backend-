@@ -122,3 +122,18 @@ export function findTownCounties(city, stateCode) {
   }
   return [...found.values()].sort((a, b) => a.county.localeCompare(b.county));
 }
+
+/**
+ * Centre of a town (the average of its ZIP centroids) in one state, or null.
+ * Used for a business's map pin when its address has no usable ZIP.
+ */
+export function findPlaceCoordinates(city, stateCode) {
+  const name = String(city ?? '').trim().toLowerCase();
+  const state = toStateCode(stateCode);
+  if (!name || !state) return null;
+  const rows = loadIndex().rows.filter((r) => r.state === state && String(r.place).toLowerCase() === name);
+  if (rows.length === 0) return null;
+  const lat = rows.reduce((sum, r) => sum + Number(r.lat), 0) / rows.length;
+  const lon = rows.reduce((sum, r) => sum + Number(r.lon), 0) / rows.length;
+  return { lat, lon, zips: rows.map((r) => r.zip) };
+}

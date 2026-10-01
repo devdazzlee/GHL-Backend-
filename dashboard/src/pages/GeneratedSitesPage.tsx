@@ -54,6 +54,7 @@ import { SITE_BASE_URL } from '../config/config';
 import { BlogPanel } from '../components/BlogPanel';
 import { SiteAddressPanel } from '../components/SiteAddressPanel';
 import { CustomDomainPanel } from '../components/CustomDomainPanel';
+import { OpeningHoursEditor } from '../components/OpeningHoursEditor';
 import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
@@ -79,6 +80,8 @@ type SiteExtraFields = {
   instagramUrl?: string | null;
   websiteUrl?: string | null;
   logoUrl?: string | null;
+  /** Opening hours JSON for the business schema, or null when not set. */
+  openingHours?: string | null;
 };
 
 type SiteUpdatePayload = Parameters<typeof updatePhase4Site>[1] &
@@ -544,6 +547,7 @@ export function GeneratedSitesPage() {
       facebookUrl: siteData.facebookUrl || '',
       instagramUrl: siteData.instagramUrl || '',
       websiteUrl: siteData.websiteUrl || '',
+      openingHours: (siteData as SiteExtraFields).openingHours ?? '',
       primaryColor: siteData.primaryColor || siteData.theme?.primaryColor || '#1F2937',
       secondaryColor: siteData.secondaryColor || siteData.theme?.secondaryColor || '#F3F4F6',
       accentColor: siteData.accentColor || siteData.theme?.accentColor || '#6366F1',
@@ -723,6 +727,7 @@ export function GeneratedSitesPage() {
         facebookUrl: editData.facebookUrl?.trim() || null,
         instagramUrl: editData.instagramUrl?.trim() || null,
         websiteUrl: editData.websiteUrl?.trim() || null,
+        openingHours: editData.openingHours || null,
       } as SiteUpdatePayload);
       await refreshAfterEdit(updated, 'Business info saved.');
     } catch (err) {
@@ -1818,6 +1823,11 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                   </div>
+                  <OpeningHoursEditor
+                    value={editData.openingHours || null}
+                    disabled={savingBusiness}
+                    onChange={(openingHours) => setEditData((prev) => ({ ...prev, openingHours: openingHours ?? '' }))}
+                  />
                   <div className="flex justify-end">
                     <Button type="submit" disabled={savingBusiness}>
                       {savingBusiness ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

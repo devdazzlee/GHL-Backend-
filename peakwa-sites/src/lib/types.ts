@@ -1,3 +1,5 @@
+import type { SchemaFacts } from './businessSchema';
+
 export type SiteTheme = {
   primaryColor: string;
   secondaryColor: string;
@@ -44,6 +46,10 @@ export type GeneratedSite = {
   /** The site's own domain; links move to it only once customDomainVerifiedAt is set. */
   customDomain?: string | null;
   customDomainVerifiedAt?: string | null;
+  /** Opening hours JSON from the dashboard (see lib/businessSchema.ts). */
+  openingHours?: string | null;
+  /** Street, ZIP and map pin for the business schema, worked out by the backend. */
+  schemaFacts?: SchemaFacts | null;
 };
 
 export type LocationPage = {
