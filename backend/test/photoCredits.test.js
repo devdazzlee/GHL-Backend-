@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import prisma from '../src/database/client.js';
 import { classifyRequest } from '../src/middleware/phase4Auth.js';
 import {
+  CREDIT_LOOKUPS_PER_HOUR,
   CREDIT_LOOKUPS_PER_RUN,
   creditFromPexelsPhoto,
   fillMissingCredits,
@@ -156,6 +157,18 @@ describe('credits for photos already on sites', () => {
     assert.deepEqual(result, { added: 2, missing: 2 });
     await fillMissingCredits({ ...site, imagesContent: site.imagesContent }, ['1', '2', '3', '4'], { lookup });
     assert.equal(lookup.calls.length, 3, 'nothing sent during the cooldown');
+  });
+});
+
+describe('the hourly budget', () => {
+  it('caps lookups across all sites, so the daily posts keep their Pexels quota', async () => {
+    stubPrisma();
+    const lookup = fakeLookup();
+    const ids = Array.from({ length: CREDIT_LOOKUPS_PER_HOUR + 20 }, (_, i) => String(1000 + i));
+    for (let run = 0; run < 12; run += 1) {
+      await fillMissingCredits({ ...site, id: 'site-1', imagesContent: site.imagesContent }, ids, { lookup });
+    }
+    assert.equal(lookup.calls.length, CREDIT_LOOKUPS_PER_HOUR);
   });
 });
 

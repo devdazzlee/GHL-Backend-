@@ -100,14 +100,30 @@ export async function sitePhotoUses(site, slotsWithUrls) {
 // ---- Looking up credits by photo number (paced; Pexels answers bursts with 429) ----
 
 export const CREDIT_LOOKUPS_PER_RUN = 8;
+/** Across all sites, so a burst of renders after a deploy never eats the Pexels quota the daily posts need. */
+export const CREDIT_LOOKUPS_PER_HOUR = 60;
 export const CREDIT_COOLDOWN_MS = 10 * 60 * 1000;
 let creditCooldownUntil = 0;
+let hourStartedAt = 0;
+let lookupsThisHour = 0;
 const runsInFlight = new Map();
 
 /** Tests only. */
 export function resetCreditLookupState() {
   creditCooldownUntil = 0;
+  hourStartedAt = 0;
+  lookupsThisHour = 0;
   runsInFlight.clear();
+}
+
+function takeLookup() {
+  if (Date.now() - hourStartedAt >= 60 * 60 * 1000) {
+    hourStartedAt = Date.now();
+    lookupsThisHour = 0;
+  }
+  if (lookupsThisHour >= CREDIT_LOOKUPS_PER_HOUR) return false;
+  lookupsThisHour += 1;
+  return true;
 }
 
 /** One photo from the Pexels API. null when it no longer exists; throws { rateLimited } on 429. */
@@ -134,6 +150,7 @@ export function fillMissingCredits(site, ids, { lookup = defaultLookup, limit = 
     if (missing.length === 0 || Date.now() < creditCooldownUntil) return { added: 0, missing: missing.length };
     const found = [];
     for (const id of missing.slice(0, limit)) {
+      if (!takeLookup()) break;
       try {
         const photo = await lookup(id);
         if (photo === undefined) break; // stock photos not configured
