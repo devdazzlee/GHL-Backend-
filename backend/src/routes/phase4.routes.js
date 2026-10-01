@@ -86,6 +86,7 @@ import {
   validateServiceTitle,
 } from '../services/serviceGeneration.service.js';
 import { regenerateService } from '../services/serviceRegeneration.service.js';
+import { normalizeOpeningHours, schemaFactsFor } from '../services/siteSchemaFacts.service.js';
 const router = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -381,6 +382,10 @@ function buildSiteUpdateData(body) {
         : null;
   }
 
+  if (body.openingHours !== undefined) {
+    updates.openingHours = normalizeOpeningHours(body.openingHours);
+  }
+
   if (body.logoUrl !== undefined) {
     updates.logoUrl =
       body.logoUrl != null && body.logoUrl !== '' ? String(body.logoUrl).trim() : null;
@@ -505,6 +510,8 @@ function shouldRegenerateContent(existing, updates) {
 function serializeSiteWithTheme(site) {
   return {
     ...site,
+    // Street, ZIP and map pin for the business schema, from data we already hold.
+    schemaFacts: schemaFactsFor(site),
     theme: {
       primaryColor: site.primaryColor,
       secondaryColor: site.secondaryColor,

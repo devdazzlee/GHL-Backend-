@@ -810,7 +810,7 @@ export default async function HomePage({ params }: PageProps) {
         subtext={cta.subtext}
         buttonText={cta.buttonText}
       />
-      <LocalBusinessSchema site={site} imageUrl={images.hero} />
+      <LocalBusinessSchema site={site} imageUrl={images.hero} cities={locations} />
       <WebSiteSchema site={site} />
     </>
   );
