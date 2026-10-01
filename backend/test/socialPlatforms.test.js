@@ -174,6 +174,17 @@ describe('summarizePlatforms', () => {
     assert.equal(p.instagram.needsReconnect, false);
   });
 
+  it('flags needsReconnect for the newer "reconnect your Facebook account" failure (551 HVAC, Sep 2026)', () => {
+    const FB_PUBLISH_ERROR =
+      "Facebook ran into a temporary issue while publishing your post. Try again in a few minutes. If it still doesn't work, reconnect your Facebook account and try again.";
+    const rows = [
+      { id: 'r1', createdAt: t('20:00:00'), platformResults: { facebook: { accountId: FB.id, status: 'FAILED', error: FB_PUBLISH_ERROR, at: t('20:45:00') } } },
+    ];
+    const p = summarizePlatforms(makeLocation(), rows);
+    assert.equal(p.facebook.lastResult.error, FB_PUBLISH_ERROR);
+    assert.equal(p.facebook.needsReconnect, true);
+  });
+
   it('clears needsReconnect after a later success, and ignores non-token failures', () => {
     const rows = [
       { id: 'r3', createdAt: t('22:00:00'), platformResults: { facebook: { status: 'SENT' }, instagram: { status: 'FAILED', error: 'Image too large' } } },
@@ -203,6 +214,12 @@ describe('summarizePlatforms', () => {
 
   it('isTokenError matches GHL\'s wording only', () => {
     assert.equal(isTokenError(TOKEN_ERROR), true);
+    assert.equal(
+      isTokenError(
+        "Facebook ran into a temporary issue while publishing your post. Try again in a few minutes. If it still doesn't work, reconnect your Facebook account and try again.",
+      ),
+      true,
+    );
     assert.equal(isTokenError('Image dimensions not supported'), false);
   });
 });
