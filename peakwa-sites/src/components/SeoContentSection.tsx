@@ -12,6 +12,8 @@ import {
 import type { SeoExtraContent } from '@/src/lib/content';
 import type { GeneratedSite } from '@/src/lib/types';
 import { resolveTheme } from '@/src/lib/theme';
+import { shouldCollapse } from '@/src/lib/readMore';
+import { ReadMore } from '@/src/components/ReadMore';
 import { sitePath } from '@/src/lib/siteUrls';
 
 type LinkItem = { label?: string; href?: string };
@@ -85,6 +87,11 @@ export function SeoContentSection({
           Boolean(f?.question?.trim() && f?.answer?.trim()),
       )
     : [];
+  const guideParagraphs = paragraphs.map((paragraph, i) => (
+    <p key={`seo-p-${i}`} className="text-base leading-relaxed text-gray-700 md:text-lg">
+      {paragraph}
+    </p>
+  ));
   const align = headingAlignClass(design);
   const centered = align.includes('center');
 
@@ -121,12 +128,15 @@ export function SeoContentSection({
         ) : null}
 
         {paragraphs.length > 0 ? (
-          <div className={clsx('mt-8 space-y-5', centered ? 'mx-auto max-w-3xl' : 'max-w-3xl')}>
-            {paragraphs.map((paragraph, i) => (
-              <p key={`seo-p-${i}`} className="text-base leading-relaxed text-gray-700 md:text-lg">
-                {paragraph}
-              </p>
-            ))}
+          <div className={clsx('mt-8', centered ? 'mx-auto max-w-3xl' : 'max-w-3xl')}>
+            {/* A long guide starts folded behind "Read more" (the 551 HVAC layout); all of it stays in the HTML. */}
+            {shouldCollapse(paragraphs) ? (
+              <ReadMore id="local-guide-text" fadeColor={theme.secondaryColor} accentColor={theme.accentColor} centered={centered}>
+                <div className="space-y-5">{guideParagraphs}</div>
+              </ReadMore>
+            ) : (
+              <div className="space-y-5">{guideParagraphs}</div>
+            )}
           </div>
         ) : null}
 
