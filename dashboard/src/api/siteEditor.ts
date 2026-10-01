@@ -111,3 +111,42 @@ export async function searchStockPhotos(siteId: string, query: string): Promise<
   });
   return data.data.photos;
 }
+
+export type CityPhotoStatus = 'MATCHES_TOWN' | 'GENERIC' | 'MISMATCHED' | 'NO_PHOTO' | 'NOT_STOCK' | 'CHECKING' | 'UNKNOWN';
+
+export interface CityPhotoRow {
+  id: string;
+  city: string;
+  state: string;
+  slug: string;
+  imageUrl: string | null;
+  status: CityPhotoStatus;
+  /** Pexels' description of the photo. */
+  description?: string | null;
+  /** Other places the description names (for MISMATCHED). */
+  names?: string[];
+}
+
+export interface CityPhotoReport {
+  pages: CityPhotoRow[];
+  summary: { matchesTown: number; generic: number; mismatched: number; checking: number };
+}
+
+export interface CityPhotoRepick {
+  changed: Array<{ city: string; from: string | null; to: string | null; description: string | null }>;
+  /** Towns whose search failed this time; their photo was left as it was. */
+  failed: string[];
+  remaining: number;
+  stoppedEarly: boolean;
+}
+
+export async function getCityPhotoReport(siteId: string): Promise<CityPhotoReport> {
+  const { data } = await api.get<Envelope<CityPhotoReport>>(`/phase4/sites/${siteId}/city-photos`);
+  return data.data;
+}
+
+/** Changes live city pages: re-picks only the photos that show somewhere else. */
+export async function repickMismatchedCityPhotos(siteId: string): Promise<CityPhotoRepick> {
+  const { data } = await api.post<Envelope<CityPhotoRepick>>(`/phase4/sites/${siteId}/city-photos/repick`, {}, { timeout: 180000 });
+  return data.data;
+}
