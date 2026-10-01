@@ -12,6 +12,7 @@ import { SiteImage } from '@/src/components/SiteImage';
 import { getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type AboutContent, type ServicesContent } from '@/src/lib/content';
 import { getSiteImages } from '@/src/lib/images';
+import { photoAlt } from '@/src/lib/photoAlt';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { resolveDesignPreset } from '@/src/designs/presets';
@@ -132,7 +133,7 @@ export default async function AboutPage({ params }: PageProps) {
               >
                 <SiteImage
                   src={images.about}
-                  alt={`${site.businessName} team and story`}
+                  alt={photoAlt(images.about, images.photos, site.industry)}
                   fill
                   className="object-cover object-center"
                   sizes="(max-width: 768px) 100vw, 896px"
@@ -206,7 +207,7 @@ export default async function AboutPage({ params }: PageProps) {
                   >
                     <SiteImage
                       src={images.about}
-                      alt={`${site.businessName} team and story`}
+                      alt={photoAlt(images.about, images.photos, site.industry)}
                       fill
                       className="object-cover object-center"
                       sizes="(max-width: 768px) 100vw, 50vw"

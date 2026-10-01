@@ -16,6 +16,7 @@ import { getServicePageContent, getSiteBySlug } from '@/src/lib/api';
 import { parseJson, type SeoExtraContent, type ServicesContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { photoAlt } from '@/src/lib/photoAlt';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import type { GeneratedSite, SiteTheme } from '@/src/lib/types';
@@ -144,7 +145,7 @@ function ServiceHero({
           <div className="absolute inset-0">
             <SiteImage
               src={serviceImage}
-              alt={`${serviceTitle} service`}
+              alt=""
               fill
               className="object-cover object-center"
               priority
@@ -242,6 +243,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const images = await getSiteImages(slug);
   const serviceIndex = allServices.indexOf(service);
   const serviceImage = images.services[serviceIndex] || images.hero;
+  const overviewImage = images.about ?? images.services[serviceIndex + 1] ?? images.hero;
   const theme = resolveTheme(site);
   const design = resolveDesignPreset(site.designVariant);
   const pad = sectionPadClass(design);
@@ -259,7 +261,8 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         base={base}
         serviceTitle={serviceTitle}
         serviceImage={serviceImage}
-        overviewImage={images.about ?? images.services[serviceIndex + 1] ?? images.hero}
+        overviewImage={overviewImage}
+        overviewImageAlt={photoAlt(overviewImage, images.photos, site.industry)}
         theme={theme}
         design={design}
         otherServices={otherServices}
@@ -427,6 +430,7 @@ type ServiceDetailFromContentProps = {
   serviceTitle: string;
   serviceImage: string | null;
   overviewImage: string | null;
+  overviewImageAlt: string;
   theme: SiteTheme;
   design: DesignPreset;
   otherServices: Array<{ title?: string; shortDescription?: string; icon?: string }>;
@@ -439,6 +443,7 @@ function ServiceDetailFromContent({
   serviceTitle,
   serviceImage,
   overviewImage,
+  overviewImageAlt,
   theme,
   design,
   otherServices,
@@ -497,7 +502,7 @@ function ServiceDetailFromContent({
               >
                 <SiteImage
                   src={overviewImage}
-                  alt={`${serviceTitle} at ${site.businessName}`}
+                  alt={overviewImageAlt}
                   fill
                   className="object-cover object-center"
                   sizes="(max-width: 1024px) 100vw, 50vw"

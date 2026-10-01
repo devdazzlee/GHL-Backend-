@@ -55,13 +55,14 @@ import { BlogPanel } from '../components/BlogPanel';
 import { SiteAddressPanel } from '../components/SiteAddressPanel';
 import { CustomDomainPanel } from '../components/CustomDomainPanel';
 import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
+import { PhotoCreditsPanel } from '../components/PhotoCreditsPanel';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../utils/format';
 import { DESIGN_CATALOG, DESIGN_VARIANT_COUNT, getDesignCatalogItem } from '../data/designCatalog';
 
-type SiteTab = 'home' | 'about' | 'services' | 'contact' | 'blog' | 'locations' | 'keywords' | 'contacts';
+type SiteTab = 'home' | 'about' | 'services' | 'contact' | 'blog' | 'locations' | 'keywords' | 'contacts' | 'photos';
 type EditTab = 'business' | 'colors' | 'regenerate' | 'status';
 
 const SITE_URL = SITE_BASE_URL.replace(/\/$/, '');
@@ -1047,6 +1048,7 @@ export function GeneratedSitesPage() {
           { id: 'locations', label: 'Location Pages', content: null },
           { id: 'keywords', label: 'Keyword Pages', content: null },
           { id: 'contacts', label: 'Contacts', content: null },
+          { id: 'photos', label: 'Photo credits', content: null },
         ]
       : [];
 
@@ -1396,6 +1398,8 @@ export function GeneratedSitesPage() {
                 </div>
               ) : activeTab === 'blog' ? (
                 <BlogPanel key={selectedSite.id} siteId={selectedSite.id} siteSlug={selectedSite.slug} siteBaseUrl={SITE_URL} />
+              ) : activeTab === 'photos' ? (
+                <PhotoCreditsPanel key={selectedSite.id} siteId={selectedSite.id} />
               ) : activeTab === 'keywords' ? (
                 <KeywordPagesPanel
                   key={selectedSite.id}

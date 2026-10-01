@@ -66,7 +66,7 @@ import {
 import { uploadSiteImage } from '../services/media.service.js';
 import { changeSiteSlug, getRedirectMap, listSiteRedirects } from '../services/siteRedirects.service.js';
 import { getSiteDomain, listCustomDomains, setSiteDomain, verifySiteDomain } from '../services/siteDomains.service.js';
-import { getStoredSiteImages, listImageSlots, searchStockPhotos, setSiteImage } from '../services/siteImages.service.js';
+import { getSitePhotos, listImageSlots, listSitePhotoCredits, searchStockPhotos, setSiteImage } from '../services/siteImages.service.js';
 import {
   getPageEditor,
   keepServicesOnRegeneration,
@@ -963,11 +963,11 @@ router.get(
   '/sites/:slug/images',
   asyncHandler(async (req, res) => {
     const site = await getGeneratedSiteBySlug(req.params.slug);
-    const images = await getStoredSiteImages(site);
+    const { images, photos } = await getSitePhotos(site);
 
     return res.json({
       success: true,
-      data: { images },
+      data: { images, photos },
       requestId: req.requestId,
     });
   }),
@@ -1556,6 +1556,15 @@ router.put(
   asyncHandler(async (req, res) => {
     const slot = await setSiteImage(req.params.siteId, req.params.slotId, req.body ?? {});
     return res.json({ success: true, data: { slot }, requestId: req.requestId });
+  }),
+);
+
+/** Every stock photo on the site with its photographer and where it is used. */
+router.get(
+  '/sites/:siteId/photo-credits',
+  asyncHandler(async (req, res) => {
+    const credits = await listSitePhotoCredits(req.params.siteId);
+    return res.json({ success: true, data: credits, requestId: req.requestId });
   }),
 );
 

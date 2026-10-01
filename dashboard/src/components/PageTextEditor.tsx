@@ -12,6 +12,7 @@ import {
   type PageEditorData,
 } from '../api/siteEditor';
 import { ImagePicker } from './ImagePicker';
+import { PhotoCreditLine } from './PhotoCreditsPanel';
 import { Button } from './ui/button';
 
 const inputClass = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white';
@@ -207,6 +208,7 @@ export function SiteImageSlots({ siteId, slotIds, kinds, searchHint }: ImagesPro
               Change image
             </Button>
           </div>
+          <PhotoCreditLine credit={slot.credit} />
         </div>
       ))}
       {picking ? (

@@ -14,6 +14,7 @@ import { getAllActiveSites, getLocationPages, getSiteBySlug } from '@/src/lib/ap
 import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
+import { photoAlt } from '@/src/lib/photoAlt';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { industryRequiresLicense } from '@/src/lib/industryClaims';
@@ -384,7 +385,7 @@ export default async function HomePage({ params }: PageProps) {
                   {images.about ? (
                     <SiteImage
                       src={images.about}
-                      alt={`About ${site.businessName}`}
+                      alt={photoAlt(images.about, images.photos, site.industry)}
                       fill
                       className="object-cover object-center"
                       sizes="(max-width: 1024px) 90vw, 45vw"
@@ -459,7 +460,7 @@ export default async function HomePage({ params }: PageProps) {
                   >
                     <SiteImage
                       src={images.services[i]!}
-                      alt={`${service.title} service`}
+                      alt={photoAlt(images.services[i], images.photos, service.title)}
                       fill
                       className="object-cover object-center transition duration-300 group-hover:scale-105"
                       sizes={
@@ -712,7 +713,7 @@ export default async function HomePage({ params }: PageProps) {
                       {location.imageUrl ? (
                         <SiteImage
                           src={location.imageUrl}
-                          alt={`${site.businessName} in ${location.city}`}
+                          alt={photoAlt(location.imageUrl, images.photos, `${location.city}, ${location.state}`)}
                           fill
                           className="object-cover transition duration-500 group-hover:scale-105"
                           sizes="(max-width: 640px) 100vw, 33vw"

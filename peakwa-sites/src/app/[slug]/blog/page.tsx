@@ -284,7 +284,7 @@ export default async function BlogPage({ params }: PageProps) {
             <div className="absolute inset-0">
               <SiteImage
                 src={heroImage}
-                alt={`${site.businessName} blog`}
+                alt=""
                 fill
                 className="object-cover object-center"
                 priority

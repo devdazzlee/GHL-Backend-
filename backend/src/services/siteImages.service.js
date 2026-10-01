@@ -2,6 +2,15 @@ import { env } from '../config/env.js';
 import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
 import { revalidateSiteFrontendCache } from './siteRevalidation.service.js';
+import {
+  creditFromPexelsPhoto,
+  creditView,
+  fillMissingCreditsInBackground,
+  listPhotoCredits,
+  pexelsPhotoId,
+  photoDescriptions,
+  readCredits,
+} from './photoCredits.service.js';
 
 /**
  * Page images for generated sites (hero, about, one per service, legacy blog covers).
@@ -13,6 +22,7 @@ import { revalidateSiteFrontendCache } from './siteRevalidation.service.js';
  *
  * Stored shape: { hero, about, services: { [serviceTitle]: entry }, blog: [entry] }
  * entry = { url, source: 'AUTO' | 'PICKED' | 'UPLOAD' }
+ * Stock photo credits live alongside, under `credits` (see photoCredits.service.js).
  * Service images are keyed by the service title, so removing or reordering
  * services keeps each picture with its service; a regenerated service with a
  * new title gets a new picture.
@@ -132,7 +142,8 @@ async function fetchPexelsImage(query) {
     if (photos.length === 0 && page > 1) photos = await searchPexelsPage(apiKey, q, 1);
     if (photos.length === 0) return null;
     const photo = photos[Math.floor(Math.random() * photos.length)];
-    return photo?.src?.large2x ?? null;
+    const url = photo?.src?.large2x ?? null;
+    return url ? { url, credit: creditFromPexelsPhoto(photo) } : null;
   } catch (error) {
     if (error?.rateLimited) throw error;
     return null;
@@ -179,12 +190,15 @@ async function defaultAutoPick(site, slot, titles) {
 
 function readStore(site) {
   const raw = parseJson(site?.imagesContent, {});
-  return {
+  const store = {
     hero: raw.hero ?? null,
     about: raw.about ?? null,
     services: raw.services && typeof raw.services === 'object' && !Array.isArray(raw.services) ? raw.services : {},
     blog: Array.isArray(raw.blog) ? raw.blog : [],
   };
+  const credits = readCredits(site);
+  if (Object.keys(credits).length > 0) store.credits = credits;
+  return store;
 }
 
 /** Every image slot the site's pages use. */
@@ -236,8 +250,10 @@ async function pickMissing(site, missing, titles, autoPickFn) {
   for (const slot of missing) {
     if (Date.now() < pickCooldownUntil) break;
     try {
-      const url = await autoPickFn(site, slot, titles);
-      if (url) found.push([slot, url]);
+      // A pick is a URL, or { url, credit } when the photographer is known.
+      const picked = await autoPickFn(site, slot, titles);
+      const url = typeof picked === 'string' ? picked : picked?.url;
+      if (url) found.push([slot, url, picked?.credit ?? null]);
     } catch (error) {
       if (!error?.rateLimited) throw error;
       pickCooldownUntil = Date.now() + PICK_COOLDOWN_MS;
@@ -251,9 +267,10 @@ async function pickMissing(site, missing, titles, autoPickFn) {
   const latest = await prisma.generatedSite.findUnique({ where: { id: site.id }, select: { imagesContent: true } });
   const store = readStore(latest);
   let filled = 0;
-  for (const [slot, url] of found) {
+  for (const [slot, url, credit] of found) {
     if (!getEntry(store, slot)?.url) {
       setEntry(store, slot, { url, source: 'AUTO' });
+      if (credit) store.credits = { ...store.credits, [credit.pexelsId]: credit };
       filled += 1;
     }
   }
@@ -326,13 +343,28 @@ export async function getStoredSiteImages(site, { autoPickFn = defaultAutoPick, 
   };
 }
 
+/**
+ * Renderer: the page images plus Pexels' description of each stock photo (used as alt
+ * text), keyed by photo number. Starts looking up descriptions it doesn't have yet,
+ * including city page photos.
+ */
+export async function getSitePhotos(site, options) {
+  const images = await getStoredSiteImages(site, options);
+  const latest = (await prisma.generatedSite.findUnique({ where: { id: site.id }, select: { imagesContent: true } })) ?? site;
+  const current = { ...site, imagesContent: latest.imagesContent };
+  const urls = [images.hero, images.about, ...images.services, ...images.blog, ...(site.locationPages ?? []).map((p) => p.imageUrl)];
+  const ids = urls.map(pexelsPhotoId).filter(Boolean);
+  if (ids.some((id) => !readCredits(current)[id])) fillMissingCreditsInBackground(current, ids, options);
+  return { images, photos: photoDescriptions(current) };
+}
+
 async function findSite(siteId) {
   const site = await prisma.generatedSite.findUnique({ where: { id: siteId } });
   if (!site) throw new AppError('Generated site not found.', 404, { code: 'SITE_NOT_FOUND' });
   return site;
 }
 
-function slotView(slot, entry) {
+function slotView(slot, entry, credits = {}) {
   return {
     id: slot.id,
     kind: slot.kind,
@@ -340,6 +372,7 @@ function slotView(slot, entry) {
     title: slot.title ?? null,
     url: entry?.url ?? null,
     source: entry?.source ?? null,
+    credit: entry?.url ? creditView(entry.url, credits) : null,
   };
 }
 
@@ -347,8 +380,19 @@ function slotView(slot, entry) {
 export async function listImageSlots(siteId, options) {
   const site = await findSite(siteId);
   await getStoredSiteImages(site, options);
-  const store = readStore(await findSite(siteId));
-  return imageSlots(site).map((slot) => slotView(slot, getEntry(store, slot)));
+  const latest = await findSite(siteId);
+  const store = readStore(latest);
+  const credits = readCredits(latest);
+  const slots = imageSlots(site).map((slot) => slotView(slot, getEntry(store, slot), credits));
+  const pending = slots.filter((s) => s.credit?.status === 'PENDING').map((s) => s.credit.pexelsId);
+  if (pending.length > 0) fillMissingCreditsInBackground(latest, pending, options);
+  return slots;
+}
+
+/** Dashboard: every stock photo on the site with its photographer (like an IMAGE-CREDITS file). */
+export async function listSitePhotoCredits(siteId, options) {
+  const slots = await listImageSlots(siteId, options);
+  return listPhotoCredits(siteId, slots, options);
 }
 
 function cleanUrl(value) {
@@ -372,7 +416,10 @@ export async function setSiteImage(siteId, slotId, { url, source = 'PICKED' } = 
   setEntry(store, slot, entry);
   await prisma.generatedSite.update({ where: { id: siteId }, data: { imagesContent: JSON.stringify(store) } });
   await revalidateSiteFrontendCache(site.slug);
-  return slotView(slot, entry);
+  // A chosen stock photo's credit is looked up by its number (not taken from the request).
+  const id = pexelsPhotoId(entry.url);
+  if (id && !store.credits?.[id]) fillMissingCreditsInBackground({ ...site, imagesContent: JSON.stringify(store) }, [id]);
+  return slotView(slot, entry, store.credits);
 }
 
 /** Stock photos to choose from (Pexels search). */
@@ -386,6 +433,16 @@ export async function searchStockPhotos(query) {
   if (!res.ok) throw new AppError('Stock photo search failed. Try again.', 502, { code: 'PEXELS_ERROR' });
   const data = await res.json();
   return (Array.isArray(data.photos) ? data.photos : [])
-    .map((p) => ({ url: p?.src?.large2x ?? null, thumb: p?.src?.medium ?? null, alt: p?.alt ?? '', photographer: p?.photographer ?? '' }))
+    .map((p) => {
+      const credit = creditFromPexelsPhoto(p);
+      return {
+        url: p?.src?.large2x ?? null,
+        thumb: p?.src?.medium ?? null,
+        alt: credit?.alt ?? '',
+        photographer: credit?.photographer ?? '',
+        photographerUrl: credit?.photographerUrl ?? null,
+        pageUrl: credit?.pageUrl ?? null,
+      };
+    })
     .filter((p) => p.url && p.thumb);
 }

@@ -42,7 +42,7 @@ export function HeroBanner({
       {heroImage ? (
         <>
           <div className="absolute inset-0">
-            <LcpHeroImage src={heroImage} alt={`${site.businessName} hero banner`} />
+            <LcpHeroImage src={heroImage} alt="" />
           </div>
           <div
             className="absolute inset-0"
