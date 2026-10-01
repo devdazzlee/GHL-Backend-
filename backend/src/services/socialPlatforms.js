@@ -22,8 +22,10 @@ const AUDITED_FIELDS = [
   'socialInstagramEnabled',
 ];
 
+// GHL uses a few wordings for the same Facebook/Instagram auth failure, e.g.
+// "token has expired…" and "reconnect your Facebook account and try again".
 const TOKEN_ERROR_RX =
-  /token has expired, been revoked, or is otherwise invalid|re-?connect your account/i;
+  /token has expired, been revoked, or is otherwise invalid|re-?connect your (?:facebook |instagram )?account/i;
 
 export function platformOf(account) {
   const p = String(account?.platform ?? '').toLowerCase();
