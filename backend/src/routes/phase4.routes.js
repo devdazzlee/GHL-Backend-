@@ -68,6 +68,7 @@ import { changeSiteSlug, getRedirectMap, listSiteRedirects } from '../services/s
 import { getSiteDomain, listCustomDomains, setSiteDomain, verifySiteDomain } from '../services/siteDomains.service.js';
 import { getSitePhotos, listImageSlots, listSitePhotoCredits, searchStockPhotos, setSiteImage } from '../services/siteImages.service.js';
 import { getSiteVideo, getVideoSlot, searchStockVideos, setSiteVideo } from '../services/siteVideo.service.js';
+import { cityPhotoReport, repickMismatchedCityPhotos } from '../services/cityPhoto.service.js';
 import {
   getPageEditor,
   keepServicesOnRegeneration,
@@ -1591,6 +1592,24 @@ router.get(
   asyncHandler(async (req, res) => {
     const videos = await searchStockVideos(req.query?.q);
     return res.json({ success: true, data: { videos }, requestId: req.requestId });
+  }),
+);
+
+/** Each city page's photo: shows the town, generic, or somewhere else (mismatched). */
+router.get(
+  '/sites/:siteId/city-photos',
+  asyncHandler(async (req, res) => {
+    const report = await cityPhotoReport(req.params.siteId);
+    return res.json({ success: true, data: report, requestId: req.requestId });
+  }),
+);
+
+/** Re-picks only the mismatched city photos (up to 10 per call). Changes live pages. */
+router.post(
+  '/sites/:siteId/city-photos/repick',
+  asyncHandler(async (req, res) => {
+    const result = await repickMismatchedCityPhotos(req.params.siteId);
+    return res.json({ success: true, data: result, requestId: req.requestId });
   }),
 );
 

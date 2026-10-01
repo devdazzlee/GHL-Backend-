@@ -58,6 +58,7 @@ import { OpeningHoursEditor } from '../components/OpeningHoursEditor';
 import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
 import { PhotoCreditsPanel } from '../components/PhotoCreditsPanel';
 import { SiteVideoPanel } from '../components/SiteVideoPanel';
+import { CityPhotosPanel } from '../components/CityPhotosPanel';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
@@ -1329,6 +1330,7 @@ export function GeneratedSitesPage() {
                 </div>
               ) : activeTab === 'locations' ? (
                 <div className="space-y-4">
+                  <CityPhotosPanel key={selectedSite.id} siteId={selectedSite.id} />
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-slate-400">
                       {selectedSite.locationPages?.length ?? 0} location page(s)
