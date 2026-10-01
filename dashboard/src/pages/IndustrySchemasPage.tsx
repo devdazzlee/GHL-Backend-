@@ -60,10 +60,29 @@ function slugifyIndustry(value: string) {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
+  'w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
 
 const textareaClass =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
+  'w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
+
+type SchemaEditorTab =
+  | 'systemPrompt'
+  | 'homePageSchema'
+  | 'aboutPageSchema'
+  | 'servicesPageSchema'
+  | 'contactPageSchema'
+  | 'locationPageSchema'
+  | 'blogPageSchema';
+
+const SCHEMA_EDITOR_TABS: { id: SchemaEditorTab; label: string }[] = [
+  { id: 'systemPrompt', label: 'System Prompt' },
+  { id: 'homePageSchema', label: 'Home' },
+  { id: 'aboutPageSchema', label: 'About' },
+  { id: 'servicesPageSchema', label: 'Services' },
+  { id: 'contactPageSchema', label: 'Contact' },
+  { id: 'locationPageSchema', label: 'Location' },
+  { id: 'blogPageSchema', label: 'Blog' },
+];
 
 function SchemaCard({
   schema,
@@ -159,6 +178,7 @@ export function IndustrySchemasPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IndustrySchema | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editorTab, setEditorTab] = useState<SchemaEditorTab>('systemPrompt');
 
   const loadSchemas = useCallback(
     async (pageOverride?: number) => {
@@ -205,6 +225,7 @@ export function IndustrySchemasPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setEditorTab('systemPrompt');
     setDialogOpen(true);
   }
 
@@ -222,6 +243,7 @@ export function IndustrySchemasPage() {
       blogPageSchema: schema.blogPageSchema,
       isDefault: schema.isDefault,
     });
+    setEditorTab('systemPrompt');
     setDialogOpen(true);
   }
 
@@ -244,6 +266,19 @@ export function IndustrySchemasPage() {
         blogPageSchema: form.blogPageSchema.trim(),
         isDefault: Boolean(form.isDefault),
       };
+
+      const emptyTab = SCHEMA_EDITOR_TABS.find((tab) => !String(payload[tab.id] ?? '').trim());
+      if (!payload.industry || !payload.displayName) {
+        setError('Industry slug and display name are required.');
+        setSaving(false);
+        return;
+      }
+      if (emptyTab) {
+        setEditorTab(emptyTab.id);
+        setError(`Fill in “${emptyTab.label}” before saving.`);
+        setSaving(false);
+        return;
+      }
 
       if (editing) {
         await updateIndustrySchema(editing.id, payload);
@@ -399,98 +434,115 @@ export function IndustrySchemasPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[min(90vh,100dvh)] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Industry Schema' : 'Add Industry Schema'}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="flex h-[min(92vh,920px)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          <DialogHeader className="shrink-0 border-b border-slate-800/80 px-5 py-4 pr-12 sm:px-6 sm:py-5">
+            <DialogTitle className="text-xl sm:text-2xl">
+              {editing ? 'Edit Industry Schema' : 'Add Industry Schema'}
+            </DialogTitle>
+            <DialogDescription className="mt-1.5">
               Configure AI prompts and JSON page schemas for an industry.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Industry slug
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={form.industry}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      industry: slugifyIndustry(e.target.value),
-                    }))
-                  }
-                  className={inputClass}
-                  placeholder="automotive"
-                  disabled={Boolean(editing)}
-                />
+          <form
+            onSubmit={(e) => void handleSave(e)}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <div className="shrink-0 space-y-4 border-b border-slate-800/80 px-5 py-4 sm:px-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-400">
+                    Industry slug
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.industry}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        industry: slugifyIndustry(e.target.value),
+                      }))
+                    }
+                    className={inputClass}
+                    placeholder="automotive"
+                    disabled={Boolean(editing)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-400">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.displayName}
+                    onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                    className={inputClass}
+                    placeholder="Automotive"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Display Name
-                </label>
+
+              <label className="flex items-center gap-2.5 text-sm text-slate-300">
                 <input
-                  type="text"
-                  required
-                  value={form.displayName}
-                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Automotive"
+                  type="checkbox"
+                  checked={Boolean(form.isDefault)}
+                  onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))}
+                  className="rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500/40"
                 />
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={Boolean(form.isDefault)}
-                onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))}
-                className="rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500/40"
-              />
-              Set as default schema (only one can be default)
-            </label>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                System Prompt
+                Set as default schema (only one can be default)
               </label>
-              <textarea
-                rows={6}
-                required
-                value={form.systemPrompt}
-                onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-                className={cn(textareaClass, 'text-sm')}
-                placeholder="AI instructions for content generation..."
-              />
             </div>
 
-            {(
-              [
-                ['homePageSchema', 'Home Page Schema (JSON)'],
-                ['aboutPageSchema', 'About Page Schema (JSON)'],
-                ['servicesPageSchema', 'Services Page Schema (JSON)'],
-                ['contactPageSchema', 'Contact Page Schema (JSON)'],
-                ['locationPageSchema', 'Location Page Schema (JSON)'],
-                ['blogPageSchema', 'Blog Page Schema (JSON)'],
-              ] as const
-            ).map(([field, label]) => (
-              <div key={field}>
-                <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={form[field]}
-                  onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-                  className={textareaClass}
-                  placeholder="{}"
-                />
-              </div>
-            ))}
+            <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-800/80 px-4 pt-3 sm:gap-2 sm:px-6">
+              {SCHEMA_EDITOR_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setEditorTab(tab.id)}
+                  className={cn(
+                    'rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition-colors',
+                    editorTab === tab.id
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="relative min-h-0 flex-1 px-5 py-5 sm:px-6 sm:py-6">
+              {SCHEMA_EDITOR_TABS.map((tab) => {
+                const isPrompt = tab.id === 'systemPrompt';
+                return (
+                  <div
+                    key={tab.id}
+                    className={cn(
+                      'absolute inset-5 flex flex-col sm:inset-6',
+                      editorTab !== tab.id && 'pointer-events-none invisible',
+                    )}
+                  >
+                    <label className="mb-2 block shrink-0 text-xs font-medium text-slate-400">
+                      {isPrompt ? 'System Prompt' : `${tab.label} Page Schema (JSON)`}
+                    </label>
+                    <textarea
+                      value={form[tab.id]}
+                      onChange={(e) => setForm((f) => ({ ...f, [tab.id]: e.target.value }))}
+                      className={cn(
+                        textareaClass,
+                        'h-full min-h-0 flex-1 resize-none',
+                        isPrompt ? 'font-sans text-sm' : 'font-mono text-xs',
+                      )}
+                      placeholder={isPrompt ? 'AI instructions for content generation...' : '{}'}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex shrink-0 justify-end gap-2 border-t border-slate-800/80 px-5 py-4 sm:px-6">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>

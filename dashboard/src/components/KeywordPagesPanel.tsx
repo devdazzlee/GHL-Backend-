@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ExternalLink, Loader2, Trash2 } from 'lucide-react';
 import {
   deleteKeywordPage,
   getKeywordJob,
@@ -11,7 +11,15 @@ import {
   type KeywordPage,
   type KeywordPageContent,
 } from '../api/keywordPages';
+import { cn } from '../lib/utils';
 import { Button } from './ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 import { PageTextEditor } from './PageTextEditor';
 
 const MAX_PER_REQUEST = 10;
@@ -43,6 +51,22 @@ function countKeywords(text: string): number {
   ).size;
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const published = status === 'PUBLISHED';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide',
+        published
+          ? 'bg-emerald-500/15 text-emerald-300'
+          : 'bg-slate-800 text-slate-400',
+      )}
+    >
+      {published ? 'Published' : 'Draft'}
+    </span>
+  );
+}
+
 /** Keyword + city pages for one site: generate drafts, preview, publish, delete. */
 export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Props) {
   const [pages, setPages] = useState<KeywordPage[] | null>(null);
@@ -72,6 +96,8 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
   }, [siteId, reloadKey]);
 
   const pageCount = countKeywords(keywords) * chosen.length;
+  const allCityIds = useMemo(() => cities.map((c) => c.id), [cities]);
+  const allCitiesSelected = cities.length > 0 && chosen.length === cities.length;
 
   async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     setBusy(true);
@@ -90,45 +116,88 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
   const previewContent = preview ? parseContent(preview.content) : null;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-slate-800 p-4">
-        <p className="mb-3 text-sm text-slate-400">
-          Generate a separate page for each keyword in each chosen city. Pages start as drafts; nothing is public
-          until you publish it. At most {MAX_PER_REQUEST} pages per run. Pages too similar to others on this site
-          are refused.
-        </p>
-        <label className="mb-1 block text-xs font-medium text-slate-500">
-          Keywords (one per line, or comma separated)
-        </label>
-        <textarea
-          value={keywords}
-          onChange={(e) => setKeywords(e.target.value)}
-          rows={4}
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-          placeholder={'dog boarding\ncat boarding'}
-        />
-        <p className="mb-1 mt-3 text-xs font-medium text-slate-500">Cities (this site&apos;s city pages)</p>
-        {cities.length === 0 ? (
-          <p className="text-sm text-amber-300">This site has no city pages yet. Add location pages first.</p>
-        ) : (
-          <div className="grid gap-1 sm:grid-cols-2">
-            {cities.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(c.id)}
-                  onChange={(e) =>
-                    setChosen((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id)))
-                  }
-                />
-                {c.city}, {c.county} County
-              </label>
-            ))}
+    <div className="space-y-8">
+      <section className="space-y-5">
+        <div>
+          <p className="text-sm font-medium text-white">Generate keyword pages</p>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
+            One page per keyword × city. Drafts stay private until you publish. Max {MAX_PER_REQUEST}{' '}
+            pages per run; pages too similar to existing ones are refused.
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-slate-500">
+            Keywords <span className="font-normal text-slate-600">(one per line, or comma separated)</span>
+          </label>
+          <textarea
+            value={keywords}
+            onChange={(e) => setKeywords(e.target.value)}
+            rows={4}
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+            placeholder={'dog boarding\ncat boarding'}
+          />
+        </div>
+
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-500">Cities</p>
+            {cities.length > 0 ? (
+              <button
+                type="button"
+                className="text-xs text-emerald-400/90 hover:text-emerald-300"
+                onClick={() => setChosen(allCitiesSelected ? [] : allCityIds)}
+              >
+                {allCitiesSelected ? 'Clear all' : 'Select all'}
+              </button>
+            ) : null}
           </div>
-        )}
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <span className={`text-xs ${pageCount > MAX_PER_REQUEST ? 'text-red-400' : 'text-slate-500'}`}>
-            {pageCount} page(s){pageCount > MAX_PER_REQUEST ? ` (max ${MAX_PER_REQUEST})` : ''}
+          {cities.length === 0 ? (
+            <p className="text-sm text-amber-300/90">
+              This site has no city pages yet. Add location pages first.
+            </p>
+          ) : (
+            <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+              {cities.map((c) => {
+                const checked = chosen.includes(c.id);
+                return (
+                  <label
+                    key={c.id}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors',
+                      checked ? 'text-slate-100' : 'text-slate-400 hover:text-slate-200',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500/40"
+                      checked={checked}
+                      onChange={(e) =>
+                        setChosen((prev) =>
+                          e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id),
+                        )
+                      }
+                    />
+                    <span>
+                      {c.city}
+                      <span className="text-slate-600"> · {c.county}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-800/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <span
+            className={cn(
+              'text-xs',
+              pageCount > MAX_PER_REQUEST ? 'text-red-400' : 'text-slate-500',
+            )}
+          >
+            {pageCount} page{pageCount === 1 ? '' : 's'}
+            {pageCount > MAX_PER_REQUEST ? ` · max ${MAX_PER_REQUEST}` : ''}
           </span>
           <Button
             type="button"
@@ -155,149 +224,217 @@ export function KeywordPagesPanel({ siteId, siteSlug, siteBaseUrl, cities }: Pro
             Generate drafts
           </Button>
         </div>
+
         {progress ? (
-          <p className="mt-3 text-xs text-slate-400">
-            Writing page {Math.min(progress.done + 1, progress.total)} of {progress.total}… each page takes about a
-            minute. You can leave this tab open; pages appear below as they are saved.
+          <p className="text-xs text-slate-400">
+            Writing page {Math.min(progress.done + 1, progress.total)} of {progress.total}… each page
+            takes about a minute. Leave this tab open; pages appear below as they save.
           </p>
         ) : null}
+
         {lastRun ? (
-          <div className="mt-3 text-xs text-slate-400">
-            Created {lastRun.created.length} · refused {lastRun.rejected.length} · skipped {lastRun.skipped.length}
+          <div className="space-y-1 text-xs text-slate-500">
+            <p>
+              Created {lastRun.created.length} · refused {lastRun.rejected.length} · skipped{' '}
+              {lastRun.skipped.length}
+            </p>
             {lastRun.rejected.map((r) => (
-              <span key={r.slug} className="block text-amber-300">
+              <p key={r.slug} className="text-amber-300/90">
                 Refused {r.keyword} / {r.city}: {r.reason}
-              </span>
+              </p>
             ))}
           </div>
         ) : null}
-      </div>
+      </section>
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-      {pages === null ? (
-        <p className="text-sm text-slate-500">Loading…</p>
-      ) : pages.length === 0 ? (
-        <p className="text-sm text-slate-500">No keyword pages yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {pages.map((p) => (
-            <div key={p.id} className="rounded-lg border border-slate-800 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-medium text-white">
-                  {p.keyword} · {p.locationPage.city}
-                </p>
-                <p className="font-mono text-xs text-slate-500">
-                  /{siteSlug}/k/{p.slug} · {p.status} · overlap{' '}
-                  {p.maxSimilarity != null ? `${Math.round(p.maxSimilarity * 100)}%` : 'n/a'}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setPreview(p)}>
-                  Preview
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setEditingId((id) => (id === p.id ? null : p.id))}
-                >
-                  {editingId === p.id ? 'Done' : 'Edit'}
-                </Button>
-                {p.status === 'PUBLISHED' ? (
-                  <>
-                    <a
-                      href={`${siteBaseUrl}/${siteSlug}/k/${p.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="self-center text-xs text-emerald-400 underline"
-                    >
-                      Live
-                    </a>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => void run(() => setKeywordPagePublished(siteId, p.id, false))}
-                    >
-                      Unpublish
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void run(() => setKeywordPagePublished(siteId, p.id, true))}
-                  >
-                    Publish
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  className="border-red-500/30 text-red-400"
-                  onClick={() => {
-                    if (window.confirm(`Delete the page "${p.keyword}" for ${p.locationPage.city}?`)) {
-                      void run(() => deleteKeywordPage(siteId, p.id));
-                    }
-                  }}
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-            {editingId === p.id ? (
-              <div className="mt-3 border-t border-slate-800 pt-3">
-                <PageTextEditor siteId={siteId} page={`keyword:${p.id}`} />
-              </div>
-            ) : null}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {preview && previewContent ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setPreview(null)}
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-4 text-sm text-slate-300">
-              <p className="text-xs text-slate-500">SEO title: {previewContent.seo?.title}</p>
-              <h2 className="text-xl font-semibold text-white">{previewContent.h1}</h2>
-              <p>{previewContent.intro}</p>
-              {(previewContent.sections ?? []).map((s, i) => (
-                <div key={i}>
-                  <h3 className="font-semibold text-white">{s.heading}</h3>
-                  {(s.paragraphs ?? []).map((para, j) => (
-                    <p key={j} className="mt-2">
-                      {para}
-                    </p>
-                  ))}
-                </div>
-              ))}
-              {(previewContent.faqs ?? []).map((f, i) => (
-                <p key={i}>
-                  <strong className="text-white">{f.question}</strong> {f.answer}
-                </p>
-              ))}
-            </div>
-            <div className="mt-6 flex justify-end">
-              <Button type="button" variant="outline" onClick={() => setPreview(null)}>
-                Close
-              </Button>
-            </div>
+      <section>
+        <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div>
+            <p className="text-sm font-medium text-white">
+              {pages === null ? '…' : pages.length} keyword page
+              {pages !== null && pages.length === 1 ? '' : 's'}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">Preview, edit, publish, or remove drafts.</p>
           </div>
         </div>
-      ) : null}
+
+        {pages === null ? (
+          <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+            Loading keyword pages…
+          </div>
+        ) : pages.length === 0 ? (
+          <p className="py-10 text-center text-sm text-slate-500">No keyword pages yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-800/80">
+            {pages.map((p) => {
+              const editing = editingId === p.id;
+              const liveUrl = `${siteBaseUrl}/${siteSlug}/k/${p.slug}`;
+              const published = p.status === 'PUBLISHED';
+              return (
+                <li key={p.id} className="py-4 first:pt-0">
+                  <div className="min-w-0 space-y-3">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-white">
+                          {p.keyword}
+                          <span className="font-normal text-slate-500"> · {p.locationPage.city}</span>
+                        </p>
+                        <StatusBadge status={p.status} />
+                      </div>
+                      <p className="truncate font-mono text-xs text-slate-600">
+                        /{siteSlug}/k/{p.slug}
+                        {p.maxSimilarity != null
+                          ? ` · overlap ${Math.round(p.maxSimilarity * 100)}%`
+                          : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          onClick={() => setPreview(p)}
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          onClick={() => setEditingId((id) => (id === p.id ? null : p.id))}
+                        >
+                          {editing ? 'Done' : 'Edit'}
+                        </Button>
+                        {published ? (
+                          <>
+                            <a
+                              href={liveUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Open live page"
+                              aria-label="Open live page"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-emerald-400 transition-colors hover:bg-slate-800 hover:text-emerald-300"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5"
+                              disabled={busy}
+                              onClick={() => void run(() => setKeywordPagePublished(siteId, p.id, false))}
+                            >
+                              Unpublish
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 px-2.5"
+                            disabled={busy}
+                            onClick={() => void run(() => setKeywordPagePublished(siteId, p.id, true))}
+                          >
+                            Publish
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          disabled={busy}
+                          title="Delete page"
+                          aria-label={`Delete ${p.keyword} for ${p.locationPage.city}`}
+                          className="h-8 w-8 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Delete the page "${p.keyword}" for ${p.locationPage.city}?`,
+                              )
+                            ) {
+                              void run(() => deleteKeywordPage(siteId, p.id));
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {editing ? (
+                    <div className="mt-4 border-t border-slate-800/80 pt-4">
+                      <PageTextEditor siteId={siteId} page={`keyword:${p.id}`} />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-w-2xl gap-0 p-0 sm:p-0">
+          <DialogHeader className="border-b border-slate-800/80 px-5 py-4 sm:px-6">
+            <DialogTitle className="pr-2 text-base">
+              {preview?.keyword}
+              {preview ? (
+                <span className="font-normal text-slate-500"> · {preview.locationPage.city}</span>
+              ) : null}
+            </DialogTitle>
+            <DialogDescription className="font-mono text-xs">
+              {preview ? `/${siteSlug}/k/${preview.slug}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(70vh,640px)] space-y-5 overflow-y-auto px-5 py-5 text-sm text-slate-300 sm:px-6">
+            {previewContent ? (
+              <>
+                {previewContent.seo?.title ? (
+                  <p className="text-xs text-slate-500">SEO title: {previewContent.seo.title}</p>
+                ) : null}
+                {previewContent.h1 ? (
+                  <h2 className="text-xl font-semibold text-white">{previewContent.h1}</h2>
+                ) : null}
+                {previewContent.intro ? (
+                  <p className="leading-relaxed">{previewContent.intro}</p>
+                ) : null}
+                {(previewContent.sections ?? []).map((s, i) => (
+                  <div key={i} className="space-y-2">
+                    <h3 className="font-medium text-white">{s.heading}</h3>
+                    {(s.paragraphs ?? []).map((para, j) => (
+                      <p key={j} className="leading-relaxed">
+                        {para}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+                {(previewContent.faqs ?? []).length > 0 ? (
+                  <div className="space-y-4 border-t border-slate-800/80 pt-5">
+                    <p className="text-sm font-medium text-white">FAQs</p>
+                    {(previewContent.faqs ?? []).map((f, i) => (
+                      <div key={i} className="space-y-1.5">
+                        <p className="font-medium text-white">{f.question}</p>
+                        <p className="leading-relaxed text-slate-300">{f.answer}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-slate-500">No preview content.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

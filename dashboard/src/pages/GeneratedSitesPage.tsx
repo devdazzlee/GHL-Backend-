@@ -55,7 +55,7 @@ import { BlogPanel } from '../components/BlogPanel';
 import { SiteAddressPanel } from '../components/SiteAddressPanel';
 import { CustomDomainPanel } from '../components/CustomDomainPanel';
 import { OpeningHoursEditor } from '../components/OpeningHoursEditor';
-import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
+import { PageTextEditor, PageTabPanel, ServicesEditor } from '../components/PageTextEditor';
 import { PhotoCreditsPanel } from '../components/PhotoCreditsPanel';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
@@ -139,21 +139,21 @@ function SiteThemeSection({ site }: { site: SiteWithTheme }) {
   const theme = getSiteTheme(site);
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-      <p className="mb-3 text-sm font-medium text-white">Theme</p>
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6">
+      <p className="mb-4 text-sm font-medium text-white">Theme</p>
+      <div className="grid gap-5 sm:grid-cols-3">
         <ThemeColorSwatch label="Primary Color" color={theme.primaryColor} />
         <ThemeColorSwatch label="Secondary Color" color={theme.secondaryColor} />
         <ThemeColorSwatch label="Accent Color" color={theme.accentColor} />
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs font-medium capitalize text-slate-200 ring-1 ring-inset ring-slate-700">
+      <div className="mt-5 flex flex-wrap gap-2">
+        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium capitalize text-slate-200 ring-1 ring-inset ring-slate-700">
           Hero: {theme.heroStyle}
         </span>
-        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs font-medium capitalize text-slate-200 ring-1 ring-inset ring-slate-700">
+        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium capitalize text-slate-200 ring-1 ring-inset ring-slate-700">
           Font: {theme.fontStyle}
         </span>
-        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 ring-1 ring-inset ring-slate-700">
+        <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 ring-1 ring-inset ring-slate-700">
           Design {site.designVariant ?? 1}/{DESIGN_VARIANT_COUNT}:{' '}
           {getDesignCatalogItem(site.designVariant).name}
         </span>
@@ -163,7 +163,7 @@ function SiteThemeSection({ site }: { site: SiteWithTheme }) {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
+  'w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40';
 
 function SiteCard({
   site,
@@ -318,51 +318,142 @@ const emptyServiceForm: Phase4ServicePayload = {
   icon: '',
 };
 
-function ReadableValue({ value }: { value: unknown }) {
-  if (value === null || value === undefined) {
+function humanizeKey(key: string) {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function pickEntry(
+  entries: [string, unknown][],
+  names: string[],
+): [string, unknown] | undefined {
+  const set = new Set(names.map((n) => n.toLowerCase()));
+  return entries.find(([key]) => set.has(key.toLowerCase()));
+}
+
+function isFaqLike(entries: [string, unknown][]) {
+  const hasQ = entries.some(([k]) => /^(questions?|q)$/i.test(k));
+  const hasA = entries.some(([k]) => /^(answers?|a)$/i.test(k));
+  return hasQ && hasA;
+}
+
+function ReadableValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (value === null || value === undefined || value === '') {
     return <span className="text-slate-600">—</span>;
   }
 
   if (typeof value === 'string') {
-    return <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{value}</p>;
+    return <p className="min-w-0 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{value}</p>;
   }
 
   if (typeof value === 'number' || typeof value === 'boolean') {
-    return <span className="text-sm text-slate-300">{String(value)}</span>;
+    return <span className="text-sm text-slate-200">{String(value)}</span>;
   }
 
   if (Array.isArray(value)) {
     return (
-      <div className="space-y-3">
+      <ol className="space-y-5">
         {value.map((item, index) => (
-          <div
-            key={index}
-            className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"
-          >
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              Item {index + 1}
-            </p>
-            <ReadableValue value={item} />
-          </div>
+          <li key={index} className="flex min-w-0 gap-3">
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-semibold text-emerald-300">
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <ReadableValue value={item} depth={depth + 1} />
+            </div>
+          </li>
         ))}
-      </div>
+      </ol>
     );
   }
 
   if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+
+    if (isFaqLike(entries)) {
+      const question = pickEntry(entries, ['question', 'questions', 'q']);
+      const answer = pickEntry(entries, ['answer', 'answers', 'a']);
+      const rest = entries.filter(([key]) => key !== question?.[0] && key !== answer?.[0]);
+
+      return (
+        <div className="min-w-0 w-full space-y-2">
+          {question ? (
+            <p className="text-sm font-medium leading-snug text-white">
+              {String(question[1] ?? '')}
+            </p>
+          ) : null}
+          {answer ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
+              {String(answer[1] ?? '')}
+            </p>
+          ) : null}
+          {rest.map(([key, val]) => (
+            <div key={key} className="pt-1">
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {humanizeKey(key)}
+              </p>
+              <ReadableValue value={val} depth={depth + 1} />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    const flatScalars = entries.every(
+      ([, v]) => v == null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean',
+    );
+    const hasLongText = entries.some(
+      ([, v]) => typeof v === 'string' && v.trim().length > 48,
+    );
+
+    if (flatScalars && entries.length > 0 && !hasLongText) {
+      return (
+        <div className="grid w-full gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          {entries.map(([key, val]) => (
+            <div key={key} className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {humanizeKey(key)}
+              </p>
+              <p className="mt-1 text-sm text-slate-200">
+                {val === null || val === undefined || val === '' ? '—' : String(val)}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (flatScalars && entries.length > 0) {
+      return (
+        <div className="w-full space-y-3">
+          {entries.map(([key, val]) => (
+            <div key={key} className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {humanizeKey(key)}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
+                {val === null || val === undefined || val === '' ? '—' : String(val)}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     return (
-      <dl className="space-y-3">
-        {Object.entries(value as Record<string, unknown>).map(([key, val]) => (
-          <div key={key}>
-            <dt className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-              {key.replace(/([A-Z])/g, ' $1').trim()}
-            </dt>
-            <dd>
-              <ReadableValue value={val} />
-            </dd>
+      <div className={cn('w-full space-y-5', depth > 0 && 'border-l border-slate-800 pl-4')}>
+        {entries.map(([key, val]) => (
+          <div key={key} className="min-w-0">
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              {humanizeKey(key)}
+            </p>
+            <ReadableValue value={val} depth={depth + 1} />
           </div>
         ))}
-      </dl>
+      </div>
     );
   }
 
@@ -380,17 +471,46 @@ function PageContentPanel({
 
   if (!parsed) {
     return (
-      <p className="py-8 text-center text-sm text-slate-500">No content generated for this page.</p>
+      <p className="py-10 text-center text-sm text-slate-500">No content generated for this page.</p>
+    );
+  }
+
+  if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    const sectionOrder = [
+      'hero',
+      'heading',
+      'subheading',
+      'intro',
+      'summary',
+      'description',
+      'localStats',
+      'stats',
+      'process',
+      'steps',
+      'services',
+      'faq',
+      'cta',
+    ];
+    const keys = [
+      ...sectionOrder.filter((k) => k in record),
+      ...Object.keys(record).filter((k) => !sectionOrder.includes(k)),
+    ];
+
+    return (
+      <div className={cn('divide-y divide-slate-800/80', className)}>
+        {keys.map((key) => (
+          <section key={key} className="py-5 first:pt-0 last:pb-0">
+            <h4 className="mb-3 text-sm font-medium text-white">{humanizeKey(key)}</h4>
+            <ReadableValue value={record[key]} />
+          </section>
+        ))}
+      </div>
     );
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-lg border border-slate-800 bg-slate-950/50 p-4',
-        className,
-      )}
-    >
+    <div className={className}>
       <ReadableValue value={parsed} />
     </div>
   );
@@ -528,7 +648,8 @@ export function GeneratedSitesPage() {
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [serviceForm, setServiceForm] = useState<Phase4ServicePayload>(emptyServiceForm);
-  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [locationEditMode, setLocationEditMode] = useState(false);
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
   const [regeneratingService, setRegeneratingService] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
@@ -641,6 +762,8 @@ export function GeneratedSitesPage() {
     setDetailOpen(true);
     setDetailLoading(true);
     setActiveTab('home');
+    setSelectedLocationId(null);
+    setLocationEditMode(false);
     setSiteContacts([]);
     setError(null);
     try {
@@ -1008,7 +1131,10 @@ export function GeneratedSitesPage() {
     setSuccess(null);
     try {
       const result = await deletePhase4LocationPage(selectedSite.id, page.id);
-      if (editingLocationId === page.id) setEditingLocationId(null);
+      if (selectedLocationId === page.id) {
+        setSelectedLocationId(null);
+        setLocationEditMode(false);
+      }
       await refreshSelectedSite();
       setSuccess(
         `City page for ${result.city} deleted${result.keywordPagesDeleted ? `, with ${result.keywordPagesDeleted} keyword page${result.keywordPagesDeleted === 1 ? '' : 's'}` : ''}.`,
@@ -1056,6 +1182,13 @@ export function GeneratedSitesPage() {
           { id: 'photos', label: 'Photo credits', content: null },
         ]
       : [];
+
+  const locationPages = selectedSite?.locationPages ?? [];
+  const activeLocationId =
+    selectedLocationId && locationPages.some((p) => p.id === selectedLocationId)
+      ? selectedLocationId
+      : locationPages[0]?.id ?? null;
+  const activeLocation = locationPages.find((p) => p.id === activeLocationId) ?? null;
 
   const hasActiveFilters = debouncedSearch.length > 0 || statusFilter !== 'all';
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -1166,10 +1299,10 @@ export function GeneratedSitesPage() {
       </div>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="flex h-[min(90vh,800px)] max-h-[min(90vh,800px)] max-w-3xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
-          <DialogHeader className="shrink-0 pr-8">
-            <DialogTitle>{selectedSite?.businessName ?? 'Site details'}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="flex h-[min(92vh,920px)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          <DialogHeader className="shrink-0 border-b border-slate-800/80 px-5 py-4 pr-12 sm:px-6 sm:py-5">
+            <DialogTitle className="text-xl sm:text-2xl">{selectedSite?.businessName ?? 'Site details'}</DialogTitle>
+            <DialogDescription className="mt-1.5">
               Generated website content and location pages
             </DialogDescription>
           </DialogHeader>
@@ -1180,18 +1313,18 @@ export function GeneratedSitesPage() {
               Loading site details…
             </div>
           ) : selectedSite ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-800 pb-1">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-800/80 px-4 pt-3 sm:gap-2 sm:px-6">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      'rounded-t-lg px-3 py-2 text-sm font-medium transition-colors',
+                      'rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition-colors',
                       activeTab === tab.id
-                        ? 'bg-slate-800 text-emerald-400'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                        ? 'bg-emerald-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
                     )}
                   >
                     {tab.label}
@@ -1199,51 +1332,55 @@ export function GeneratedSitesPage() {
                 ))}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-                <div className="mb-4 grid gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-slate-500">Industry</p>
-                    <p className="text-sm capitalize text-slate-200">{selectedSite.industry}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Location</p>
-                    <p className="text-sm text-slate-200">
-                      {selectedSite.city}, {selectedSite.state}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Slug</p>
-                    <p className="font-mono text-sm text-slate-300">{selectedSite.slug}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Status</p>
-                    <div className="mt-1">
-                      <SiteStatusBadge status={selectedSite.status} />
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+                {activeTab === 'home' ? (
+                  <>
+                    <div className="mb-5 grid gap-4 rounded-xl border border-slate-800 bg-slate-950/40 p-5 sm:grid-cols-2 sm:gap-5 sm:p-6">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Industry</p>
+                        <p className="mt-1.5 text-sm capitalize text-slate-200">{selectedSite.industry}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Location</p>
+                        <p className="mt-1.5 text-sm text-slate-200">
+                          {selectedSite.city}, {selectedSite.state}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Slug</p>
+                        <p className="mt-1.5 font-mono text-sm text-slate-300">{selectedSite.slug}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</p>
+                        <div className="mt-1.5">
+                          <SiteStatusBadge status={selectedSite.status} />
+                        </div>
+                      </div>
+                      {selectedSite.phone ? (
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Phone</p>
+                          <p className="mt-1.5 text-sm text-slate-200">{selectedSite.phone}</p>
+                        </div>
+                      ) : null}
+                      {selectedSite.email ? (
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
+                          <p className="mt-1.5 text-sm text-slate-200">{selectedSite.email}</p>
+                        </div>
+                      ) : null}
+                      {selectedSite.description ? (
+                        <div className="sm:col-span-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Description</p>
+                          <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{selectedSite.description}</p>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                  {selectedSite.phone ? (
-                    <div>
-                      <p className="text-xs text-slate-500">Phone</p>
-                      <p className="text-sm text-slate-200">{selectedSite.phone}</p>
-                    </div>
-                  ) : null}
-                  {selectedSite.email ? (
-                    <div>
-                      <p className="text-xs text-slate-500">Email</p>
-                      <p className="text-sm text-slate-200">{selectedSite.email}</p>
-                    </div>
-                  ) : null}
-                  {selectedSite.description ? (
-                    <div className="sm:col-span-2">
-                      <p className="text-xs text-slate-500">Description</p>
-                      <p className="text-sm text-slate-300">{selectedSite.description}</p>
-                    </div>
-                  ) : null}
-                </div>
 
-                <div className="mb-4">
-                  <SiteThemeSection site={selectedSite} />
-                </div>
+                    <div className="mb-5">
+                      <SiteThemeSection site={selectedSite} />
+                    </div>
+                  </>
+                ) : null}
 
               {activeTab === 'services' ? (
                 <div className="space-y-4">
@@ -1327,11 +1464,17 @@ export function GeneratedSitesPage() {
                   </div>
                 </div>
               ) : activeTab === 'locations' ? (
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-slate-400">
-                      {selectedSite.locationPages?.length ?? 0} location page(s)
-                    </p>
+                <div className="flex min-h-[420px] flex-col">
+                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {locationPages.length} location
+                        {locationPages.length === 1 ? '' : 's'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        City landing pages for local SEO. Select a city to review or edit its content.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       size="sm"
@@ -1341,38 +1484,75 @@ export function GeneratedSitesPage() {
                       }}
                     >
                       <MapPin className="h-4 w-4" />
-                      Add Location Pages
+                      Add locations
                     </Button>
                   </div>
 
-                  {(selectedSite.locationPages?.length ?? 0) === 0 ? (
-                    <p className="py-8 text-center text-sm text-slate-500">
-                      No location pages yet.
-                    </p>
+                  {locationPages.length === 0 ? (
+                    <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+                      <MapPin className="h-8 w-8 text-slate-600" />
+                      <p className="mt-3 text-sm font-medium text-slate-300">No location pages yet</p>
+                      <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
+                        Add cities this business serves to generate local landing pages.
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-4">
-                      {selectedSite.locationPages?.map((page: Phase4LocationPage) => (
-                        <div
-                          key={page.id}
-                          className="rounded-lg border border-slate-800 bg-slate-950/40 p-4"
-                        >
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <p className="font-medium text-white">
-                                {page.city}, {page.county} County
+                    <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                      <nav
+                        className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-r lg:border-slate-800/80 lg:pr-4"
+                        aria-label="Location pages"
+                      >
+                        {locationPages.map((page) => {
+                          const selected = page.id === activeLocationId;
+                          return (
+                            <button
+                              key={page.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedLocationId(page.id);
+                                setLocationEditMode(false);
+                              }}
+                              className={cn(
+                                'shrink-0 rounded-lg px-3 py-2.5 text-left transition-colors lg:w-full',
+                                selected
+                                  ? 'bg-emerald-600/15 text-emerald-300'
+                                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                              )}
+                            >
+                              <span className="block text-sm font-medium leading-snug">
+                                {page.city}
+                              </span>
+                              <span className="mt-0.5 block text-[11px] text-slate-500">
+                                {page.county} County
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </nav>
+
+                      {activeLocation ? (
+                        <div className="min-w-0">
+                          <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+                            <div className="min-w-0">
+                              <h3 className="text-lg font-medium text-white">
+                                {activeLocation.city}, {activeLocation.county} County
+                              </h3>
+                              <p className="mt-1 font-mono text-xs text-slate-500">
+                                /{selectedSite.slug}/{activeLocation.slug}
                               </p>
-                              <p className="font-mono text-xs text-slate-500">{page.slug}</p>
+                              <p className="mt-1 text-xs text-slate-600">
+                                Added {formatDate(activeLocation.createdAt)}
+                              </p>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500">{formatDate(page.createdAt)}</span>
+                            <div className="flex flex-wrap items-center gap-2">
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setEditingLocationId((id) => (id === page.id ? null : page.id))}
+                                onClick={() => setLocationEditMode((v) => !v)}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
-                                {editingLocationId === page.id ? 'Done' : 'Edit'}
+                                {locationEditMode ? 'Done' : 'Edit'}
                               </Button>
                               <Button
                                 type="button"
@@ -1380,9 +1560,9 @@ export function GeneratedSitesPage() {
                                 size="sm"
                                 className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                                 disabled={deletingLocationId !== null}
-                                onClick={() => void handleDeleteLocationPage(page)}
+                                onClick={() => void handleDeleteLocationPage(activeLocation)}
                               >
-                                {deletingLocationId === page.id ? (
+                                {deletingLocationId === activeLocation.id ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -1391,13 +1571,18 @@ export function GeneratedSitesPage() {
                               </Button>
                             </div>
                           </div>
-                          {editingLocationId === page.id ? (
-                            <PageTextEditor siteId={selectedSite.id} page={`location:${page.id}`} />
+
+                          {locationEditMode ? (
+                            <PageTextEditor
+                              key={activeLocation.id}
+                              siteId={selectedSite.id}
+                              page={`location:${activeLocation.id}`}
+                            />
                           ) : (
-                            <PageContentPanel content={page.content} />
+                            <PageContentPanel content={activeLocation.content} />
                           )}
                         </div>
-                      ))}
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -1426,8 +1611,8 @@ export function GeneratedSitesPage() {
                   </p>
 
                   {contactsLoading ? (
-                    <div className="flex items-center justify-center py-12 text-slate-400">
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+                      <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
                       Loading contacts…
                     </div>
                   ) : siteContacts.length === 0 ? (
@@ -1462,16 +1647,17 @@ export function GeneratedSitesPage() {
                   )}
                 </div>
               ) : activeTab === 'home' || activeTab === 'about' || activeTab === 'contact' ? (
-                <div key={`${selectedSite.id}-${activeTab}`} className="space-y-6">
-                  {activeTab !== 'contact' ? (
-                    <SiteImageSlots
-                      siteId={selectedSite.id}
-                      slotIds={[activeTab === 'home' ? 'hero' : 'about']}
-                      searchHint={selectedSite.industry}
-                    />
-                  ) : null}
-                  <PageTextEditor siteId={selectedSite.id} page={activeTab} />
-                </div>
+                <PageTabPanel
+                  key={`${selectedSite.id}-${activeTab}`}
+                  siteId={selectedSite.id}
+                  page={activeTab}
+                  slotIds={
+                    activeTab === 'contact'
+                      ? undefined
+                      : [activeTab === 'home' ? 'hero' : 'about']
+                  }
+                  searchHint={selectedSite.industry}
+                />
               ) : (
                 <PageContentPanel
                   content={tabs.find((t) => t.id === activeTab)?.content ?? null}
@@ -1624,15 +1810,17 @@ export function GeneratedSitesPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent
           key={editTarget?.id}
-          className="flex h-[min(85vh,720px)] max-h-[min(85vh,720px)] max-w-2xl flex-col overflow-hidden"
+          className="flex h-[min(92vh,900px)] w-[calc(100%-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:w-full"
         >
-          <DialogHeader className="shrink-0">
-            <DialogTitle>Edit {editTarget?.businessName ?? 'site'}</DialogTitle>
-            <DialogDescription>Update business info, theme, status, or regenerate content.</DialogDescription>
+          <DialogHeader className="shrink-0 border-b border-slate-800/80 px-5 py-4 pr-12 sm:px-6 sm:py-5">
+            <DialogTitle className="text-xl sm:text-2xl">Edit {editTarget?.businessName ?? 'site'}</DialogTitle>
+            <DialogDescription className="mt-1.5">
+              Update business info, theme, status, or regenerate content.
+            </DialogDescription>
           </DialogHeader>
 
           {editTarget ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {editLoading ? (
                 <div className="flex flex-1 items-center justify-center text-slate-400">
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -1641,12 +1829,12 @@ export function GeneratedSitesPage() {
               ) : (
                 <>
               {editSuccess ? (
-                <div className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                <div className="mx-5 mt-4 shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 sm:mx-6">
                   {editSuccess}
                 </div>
               ) : null}
 
-              <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-800 pb-1">
+              <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-800/80 px-4 pt-3 sm:gap-2 sm:px-6">
                 {[
                   { id: 'business' as const, label: 'Business Info' },
                   { id: 'colors' as const, label: 'Colors & Theme' },
@@ -1658,10 +1846,10 @@ export function GeneratedSitesPage() {
                     type="button"
                     onClick={() => setEditTab(tab.id)}
                     className={cn(
-                      'rounded-t-lg px-3 py-2 text-sm font-medium transition-colors',
+                      'rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition-colors',
                       editTab === tab.id
-                        ? 'bg-slate-800 text-emerald-400'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                        ? 'bg-emerald-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
                     )}
                   >
                     {tab.label}
@@ -1669,15 +1857,15 @@ export function GeneratedSitesPage() {
                 ))}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
               {editTab === 'business' ? (
-                <form onSubmit={(e) => void handleSaveBusiness(e)} className="space-y-4">
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                <form onSubmit={(e) => void handleSaveBusiness(e)} className="space-y-5">
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-sm leading-relaxed text-amber-200">
                     Changing business name, industry or city will regenerate all page content
                     automatically.
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                    <label className="mb-1.5 block text-xs font-medium text-slate-400">
                       Business Name
                     </label>
                     <input
@@ -1691,7 +1879,7 @@ export function GeneratedSitesPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">Industry</label>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-400">Industry</label>
                     <input
                       type="text"
                       required
@@ -1702,13 +1890,13 @@ export function GeneratedSitesPage() {
                       className={inputClass}
                       placeholder="hvac, automotive, plumbing"
                     />
-                    <p className="mt-1 text-xs text-amber-400/80">
+                    <p className="mt-1.5 text-xs text-amber-400/80">
                       Changing industry will regenerate all page content automatically.
                     </p>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Phone</label>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">Phone</label>
                       <input
                         type="text"
                         value={editData.phone || ''}
@@ -1719,7 +1907,7 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Email</label>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">Email</label>
                       <input
                         type="email"
                         value={editData.email || ''}
@@ -1731,11 +1919,11 @@ export function GeneratedSitesPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                    <label className="mb-1.5 block text-xs font-medium text-slate-400">
                       Description
                     </label>
                     <textarea
-                      rows={3}
+                      rows={4}
                       value={editData.description || ''}
                       onChange={(e) =>
                         setEditData((prev) => ({ ...prev, description: e.target.value }))
@@ -1744,7 +1932,7 @@ export function GeneratedSitesPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">
+                    <label className="mb-1.5 block text-xs font-medium text-slate-400">
                       Full Address
                     </label>
                     <textarea
@@ -1757,9 +1945,9 @@ export function GeneratedSitesPage() {
                       placeholder="123 Main St, Suite 100"
                     />
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">City</label>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">City</label>
                       <input
                         type="text"
                         required
@@ -1771,7 +1959,7 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">State</label>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">State</label>
                       <input
                         type="text"
                         required
@@ -1783,9 +1971,9 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-1">
+                  <div className="grid gap-5 sm:grid-cols-1">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">
                         Facebook URL
                       </label>
                       <input
@@ -1799,7 +1987,7 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">
                         Instagram URL
                       </label>
                       <input
@@ -1813,7 +2001,7 @@ export function GeneratedSitesPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">
+                      <label className="mb-1.5 block text-xs font-medium text-slate-400">
                         Website URL
                       </label>
                       <input
@@ -1832,7 +2020,7 @@ export function GeneratedSitesPage() {
                     disabled={savingBusiness}
                     onChange={(openingHours) => setEditData((prev) => ({ ...prev, openingHours: openingHours ?? '' }))}
                   />
-                  <div className="flex justify-end">
+                  <div className="flex justify-end border-t border-slate-800/80 pt-4">
                     <Button type="submit" disabled={savingBusiness}>
                       {savingBusiness ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                       Save Business Info
@@ -2160,7 +2348,7 @@ export function GeneratedSitesPage() {
       </Dialog>
 
       <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl gap-5 sm:p-6">
           <DialogHeader>
             <DialogTitle>Add location pages</DialogTitle>
             <DialogDescription>
@@ -2169,154 +2357,182 @@ export function GeneratedSitesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex gap-2">
-            <Button
+          <div
+            className="grid w-full grid-cols-2 rounded-lg border border-slate-700/80 bg-slate-950/50 p-1"
+            role="tablist"
+            aria-label="Location entry mode"
+          >
+            <button
               type="button"
-              size="sm"
-              variant={locationMode === 'radius' ? 'default' : 'outline'}
+              role="tab"
+              aria-selected={locationMode === 'radius'}
               onClick={() => setLocationMode('radius')}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                locationMode === 'radius'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200',
+              )}
             >
               ZIP + radius
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              size="sm"
-              variant={locationMode === 'manual' ? 'default' : 'outline'}
+              role="tab"
+              aria-selected={locationMode === 'manual'}
               onClick={() => setLocationMode('manual')}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                locationMode === 'manual'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200',
+              )}
             >
               Manual cities
-            </Button>
+            </button>
           </div>
 
-          <form onSubmit={handleAddLocationPages} className="space-y-4">
+          <form onSubmit={handleAddLocationPages} className="space-y-5">
             {locationMode === 'radius' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">ZIP code</label>
-                  <input
-                    type="text"
-                    required
-                    value={radiusZip}
-                    onChange={(e) => setRadiusZip(e.target.value)}
-                    className={inputClass}
-                    placeholder="07030"
-                  />
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <label className="mb-1.5 block text-xs font-medium text-slate-500">ZIP code</label>
+                    <input
+                      type="text"
+                      required
+                      value={radiusZip}
+                      onChange={(e) => setRadiusZip(e.target.value)}
+                      className={inputClass}
+                      placeholder="07030"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                      Radius (miles)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      required
+                      value={radiusMiles}
+                      onChange={(e) => setRadiusMiles(e.target.value)}
+                      className={inputClass}
+                      placeholder="15"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
-                    Radius (miles)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    required
-                    value={radiusMiles}
-                    onChange={(e) => setRadiusMiles(e.target.value)}
-                    className={inputClass}
-                    placeholder="15"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={previewingTowns || !radiusZip.trim()}
-                    onClick={() => void handlePreviewTowns()}
-                  >
-                    {previewingTowns ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Preview towns
-                  </Button>
-                  {radiusPreview ? (
-                    <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-800 p-2 text-xs">
-                      <p className="mb-2 text-slate-400">
-                        {radiusPreview.length} real towns in range (ZIP data, nearest first).
-                        Generating adds up to 8 new pages per run; towns that already have a page are skipped.
-                      </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={previewingTowns || !radiusZip.trim()}
+                  onClick={() => void handlePreviewTowns()}
+                >
+                  {previewingTowns ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Preview towns
+                </Button>
+                {radiusPreview ? (
+                  <div className="max-h-56 overflow-y-auto border-t border-slate-800 pt-3 text-xs">
+                    <p className="mb-3 text-slate-400">
+                      {radiusPreview.length} real towns in range (ZIP data, nearest first).
+                      Generating adds up to 8 new pages per run; towns that already have a page are skipped.
+                    </p>
+                    <ul className="divide-y divide-slate-800/80">
                       {radiusPreview.map((t) => (
-                        <div key={`${t.city}-${t.county}-${t.state}`} className="flex justify-between gap-2 py-0.5">
-                          <span className="text-slate-200">
+                        <li
+                          key={`${t.city}-${t.county}-${t.state}`}
+                          className="flex items-baseline justify-between gap-3 py-2"
+                        >
+                          <span className="min-w-0 text-slate-200">
                             {t.city}, {t.county} County, {t.state}
                           </span>
                           <span className="shrink-0 text-slate-500">
-                            {t.miles} mi{t.hasPage ? ' · has page' : ''}{t.isBusinessCity ? ' · business city' : ''}
+                            {t.miles} mi{t.hasPage ? ' · has page' : ''}
+                            {t.isBusinessCity ? ' · business city' : ''}
                           </span>
-                        </div>
+                        </li>
                       ))}
-                    </div>
-                  ) : null}
-                </div>
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <>
-                <div className="max-h-[min(50vh,360px)] space-y-3 overflow-y-auto pr-1">
-                  {locationRows.map((row, index) => (
-                    <div
-                      key={index}
-                      className="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1.4fr_0.8fr_1fr_auto]"
-                    >
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-500">City</label>
-                        <input
-                          type="text"
-                          required
-                          value={row.city}
-                          onChange={(e) => {
-                            const next = [...locationRows];
-                            next[index] = { ...next[index], city: e.target.value };
-                            setLocationRows(next);
-                          }}
-                          className={inputClass}
-                          placeholder="Hackensack"
-                        />
+              <div className="space-y-4">
+                <div className="max-h-[min(50vh,360px)] overflow-y-auto">
+                  <div className="divide-y divide-slate-800/80">
+                    {locationRows.map((row, index) => (
+                      <div
+                        key={index}
+                        className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[1.4fr_0.9fr_1.1fr_auto]"
+                      >
+                        <div className="min-w-0">
+                          <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                            City
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={row.city}
+                            onChange={(e) => {
+                              const next = [...locationRows];
+                              next[index] = { ...next[index], city: e.target.value };
+                              setLocationRows(next);
+                            }}
+                            className={inputClass}
+                            placeholder="Hackensack"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                            State
+                          </label>
+                          <input
+                            type="text"
+                            value={row.state ?? ''}
+                            onChange={(e) => {
+                              const next = [...locationRows];
+                              next[index] = { ...next[index], state: e.target.value };
+                              setLocationRows(next);
+                            }}
+                            className={inputClass}
+                            placeholder={selectedSite?.state || 'Site state'}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                            County <span className="font-normal text-slate-600">(optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={row.county ?? ''}
+                            onChange={(e) => {
+                              const next = [...locationRows];
+                              next[index] = { ...next[index], county: e.target.value };
+                              setLocationRows(next);
+                            }}
+                            className={inputClass}
+                            placeholder="Found automatically"
+                          />
+                        </div>
+                        <div className="flex items-end sm:justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={locationRows.length <= 1}
+                            onClick={() =>
+                              setLocationRows((rows) => rows.filter((_, i) => i !== index))
+                            }
+                            aria-label="Remove row"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-500">State</label>
-                        <input
-                          type="text"
-                          value={row.state ?? ''}
-                          onChange={(e) => {
-                            const next = [...locationRows];
-                            next[index] = { ...next[index], state: e.target.value };
-                            setLocationRows(next);
-                          }}
-                          className={inputClass}
-                          placeholder={selectedSite?.state || 'Site state'}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-500">
-                          County <span className="font-normal text-slate-600">(optional)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={row.county ?? ''}
-                          onChange={(e) => {
-                            const next = [...locationRows];
-                            next[index] = { ...next[index], county: e.target.value };
-                            setLocationRows(next);
-                          }}
-                          className={inputClass}
-                          placeholder="Found automatically"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          disabled={locationRows.length <= 1}
-                          onClick={() =>
-                            setLocationRows((rows) => rows.filter((_, i) => i !== index))
-                          }
-                          aria-label="Remove row"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
                 <Button
@@ -2328,10 +2544,10 @@ export function GeneratedSitesPage() {
                   <Plus className="h-4 w-4" />
                   Add row
                 </Button>
-              </>
+              </div>
             )}
 
-            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-800 pt-4 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"

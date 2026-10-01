@@ -43,8 +43,8 @@ function navClass(isActive: boolean) {
   return cn(
     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
     isActive
-      ? 'bg-emerald-500/15 text-emerald-400'
-      : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+      ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/25'
+      : 'text-slate-400 hover:bg-slate-800/80 hover:text-white',
   );
 }
 
@@ -57,16 +57,12 @@ export function AppSidebar({ onNavigate, className }: AppSidebarProps) {
   const { user, signOut } = useAuth();
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      <div className="border-b border-slate-800 px-5 py-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-            PW
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Peakwa</p>
-            <p className="text-xs text-slate-500">GBP Automation</p>
-          </div>
-        </div>
+      <div className="border-b border-slate-800/80 px-5 py-5">
+        <img
+          src="/logo.png?v=7"
+          alt="Peakwa"
+          className="logo-on-dark h-14 w-auto max-w-[220px] object-contain"
+        />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

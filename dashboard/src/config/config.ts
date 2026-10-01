@@ -16,9 +16,9 @@
  */
 
 // --- Active config ---
-// export const API_URL = 'http://localhost:4000';
-// export const SITE_BASE_URL = 'http://localhost:3000';
+export const API_URL = 'http://localhost:4000';
+export const SITE_BASE_URL = 'http://localhost:3000';
 
 // --- Production example (swap API_URL when deploying dashboard) ---
-export const API_URL = 'https://backend.peakwa.com';
-export const SITE_BASE_URL = 'https://site.peakwa.com';
+// export const API_URL = 'https://backend.peakwa.com';
+// export const SITE_BASE_URL = 'https://site.peakwa.com';

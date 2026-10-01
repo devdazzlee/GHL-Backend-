@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
   generateServicePage,
@@ -40,21 +40,46 @@ interface EditorProps {
   labelSkip?: number;
   /** Message when the page has no content yet; `action` creates it. */
   emptyAction?: { label: string; run: () => Promise<PageEditorData> };
+  /** When true, show nothing while loading (parent can show a single shared loader). */
+  silentLoading?: boolean;
+  /** Fires once the initial load finishes (success or error). */
+  onSettled?: () => void;
 }
 
 /** Edits the text of one page. Only changed texts are sent; each edit can be undone. */
-export function PageTextEditor({ siteId, page, filter, labelSkip = 0, emptyAction }: EditorProps) {
+export function PageTextEditor({
+  siteId,
+  page,
+  filter,
+  labelSkip = 0,
+  emptyAction,
+  silentLoading = false,
+  onSettled,
+}: EditorProps) {
   const [data, setData] = useState<PageEditorData | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
+
   useEffect(() => {
     let cancelled = false;
+    setData(null);
+    setError(null);
     getPageEditor(siteId, page).then(
-      (d) => !cancelled && setData(d),
-      (err: unknown) => !cancelled && setError(err instanceof Error ? err.message : 'Failed to load'),
+      (d) => {
+        if (cancelled) return;
+        setData(d);
+        onSettledRef.current?.();
+      },
+      (err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load');
+        onSettledRef.current?.();
+      },
     );
     return () => {
       cancelled = true;
@@ -77,7 +102,14 @@ export function PageTextEditor({ siteId, page, filter, labelSkip = 0, emptyActio
   }
 
   if (!data) {
-    return error ? <p className="text-sm text-red-400">{error}</p> : <Loader2 className="h-4 w-4 animate-spin text-slate-500" />;
+    if (error) return <p className="text-sm text-red-400">{error}</p>;
+    if (silentLoading) return null;
+    return (
+      <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        Loading page content…
+      </div>
+    );
   }
   if (!data.available) {
     return (
@@ -168,28 +200,59 @@ interface ImagesProps {
   slotIds?: string[];
   kinds?: ImageSlot['kind'][];
   searchHint?: string;
+  silentLoading?: boolean;
+  onSettled?: () => void;
 }
 
 const SOURCE_LABEL: Record<string, string> = { AUTO: 'picked automatically', PICKED: 'chosen', UPLOAD: 'uploaded' };
 
 /** Current images for some slots, each with a "Change image" button. */
-export function SiteImageSlots({ siteId, slotIds, kinds, searchHint }: ImagesProps) {
+export function SiteImageSlots({
+  siteId,
+  slotIds,
+  kinds,
+  searchHint,
+  silentLoading = false,
+  onSettled,
+}: ImagesProps) {
   const [slots, setSlots] = useState<ImageSlot[] | null>(null);
   const [picking, setPicking] = useState<ImageSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
+
   useEffect(() => {
     let cancelled = false;
+    setSlots(null);
+    setError(null);
     listImageSlots(siteId).then(
-      (s) => !cancelled && setSlots(s),
-      (err: unknown) => !cancelled && setError(err instanceof Error ? err.message : 'Failed to load images'),
+      (s) => {
+        if (cancelled) return;
+        setSlots(s);
+        onSettledRef.current?.();
+      },
+      (err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load images');
+        onSettledRef.current?.();
+      },
     );
     return () => {
       cancelled = true;
     };
   }, [siteId]);
 
-  if (!slots) return error ? <p className="text-sm text-red-400">{error}</p> : <Loader2 className="h-4 w-4 animate-spin text-slate-500" />;
+  if (!slots) {
+    if (error) return <p className="text-sm text-red-400">{error}</p>;
+    if (silentLoading) return null;
+    return (
+      <div className="flex min-h-[140px] items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        Loading images…
+      </div>
+    );
+  }
   const shown = slots.filter((s) => (slotIds ? slotIds.includes(s.id) : true) && (kinds ? kinds.includes(s.kind) : true));
 
   return (
@@ -228,6 +291,61 @@ export function SiteImageSlots({ siteId, slotIds, kinds, searchHint }: ImagesPro
   );
 }
 
+/**
+ * Home / About style tab: images + text with a single shared loader
+ * (avoids stacking "Loading images…" and "Loading page content…").
+ */
+export function PageTabPanel({
+  siteId,
+  page,
+  slotIds,
+  searchHint,
+}: {
+  siteId: string;
+  page: string;
+  slotIds?: string[];
+  searchHint?: string;
+}) {
+  const hasImages = Boolean(slotIds?.length);
+  const [imagesReady, setImagesReady] = useState(!hasImages);
+  const [textReady, setTextReady] = useState(false);
+
+  useEffect(() => {
+    setImagesReady(!hasImages);
+    setTextReady(false);
+  }, [siteId, page, hasImages]);
+
+  const ready = imagesReady && textReady;
+
+  return (
+    <div className="relative min-h-[220px]">
+      {!ready ? (
+        <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+          Loading…
+        </div>
+      ) : null}
+      <div className={ready ? 'space-y-8' : 'invisible h-0 overflow-hidden'}>
+        {hasImages ? (
+          <SiteImageSlots
+            siteId={siteId}
+            slotIds={slotIds}
+            searchHint={searchHint}
+            silentLoading
+            onSettled={() => setImagesReady(true)}
+          />
+        ) : null}
+        <PageTextEditor
+          siteId={siteId}
+          page={page}
+          silentLoading
+          onSettled={() => setTextReady(true)}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Services tab: page texts, then each service with its image, descriptions and detail page. */
 export function ServicesEditor({ siteId, industry }: { siteId: string; industry: string }) {
   const [services, setServices] = useState<PageEditorData['services'] | null>(null);
@@ -241,7 +359,14 @@ export function ServicesEditor({ siteId, industry }: { siteId: string; industry:
     };
   }, [siteId]);
 
-  if (!services) return <Loader2 className="h-4 w-4 animate-spin text-slate-500" />;
+  if (!services) {
+    return (
+      <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        Loading services…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

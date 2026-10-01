@@ -53,7 +53,16 @@ export function PhotoCreditsPanel({ siteId }: { siteId: string }) {
     };
   }, [siteId, reloads]);
 
-  if (!data) return error ? <p className="text-sm text-red-400">{error}</p> : <Loader2 className="h-4 w-4 animate-spin text-slate-500" />;
+  if (!data) {
+    return error ? (
+      <p className="text-sm text-red-400">{error}</p>
+    ) : (
+      <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        Loading photo credits…
+      </div>
+    );
+  }
   const stock = data.photos.filter((p) => p.credit.status !== 'NOT_STOCK');
   const own = data.photos.length - stock.length;
 

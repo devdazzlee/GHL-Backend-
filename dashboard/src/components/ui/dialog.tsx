@@ -38,8 +38,8 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-slate-950 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
-          <X className="h-4 w-4 text-slate-400" />
+        <DialogPrimitive.Close className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-white opacity-90 transition-opacity hover:bg-white/10 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
+          <X className="h-3.5 w-3.5" strokeWidth={2.25} />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
@@ -49,7 +49,7 @@ export function DialogContent({
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('flex flex-col space-y-1.5 text-left', className)} {...props} />
+    <div className={cn('flex flex-col space-y-1.5 pr-10 text-left', className)} {...props} />
   );
 }
 

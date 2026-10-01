@@ -161,8 +161,8 @@ export function BlogPanel({ siteId, siteSlug, siteBaseUrl }: Props) {
     return error ? (
       <p className="text-sm text-red-400">{error}</p>
     ) : (
-      <div className="flex items-center justify-center py-12 text-slate-400">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+      <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
         Loading blog…
       </div>
     );
