@@ -39,7 +39,7 @@ function digest(value) {
   return createHash('sha256').update(String(value), 'utf8').digest();
 }
 
-/** Parses "label=key,label2=key2" (labels optional). Keys under 24 chars are ignored. */
+/** Parses "label=key,label2=key2" (labels optional). Keys under 8 chars are ignored. */
 export function parseAdminKeys(raw = process.env.ADMIN_API_KEYS) {
   return String(raw ?? '')
     .split(',')
@@ -51,7 +51,7 @@ export function parseAdminKeys(raw = process.env.ADMIN_API_KEYS) {
       const key = eq > 0 ? entry.slice(eq + 1).trim() : entry;
       return { label, key };
     })
-    .filter(({ key }) => key.length >= 24);
+    .filter(({ key }) => key.length >= 8);
 }
 
 /** Constant-time match against every candidate; returns the matching label or null. */
