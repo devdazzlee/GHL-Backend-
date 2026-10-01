@@ -198,6 +198,8 @@ function readStore(site) {
   };
   const credits = readCredits(site);
   if (Object.keys(credits).length > 0) store.credits = credits;
+  // The site's stock video lives alongside (siteVideo.service.js); kept as it is.
+  if (raw.video && typeof raw.video === 'object') store.video = raw.video;
   return store;
 }
 

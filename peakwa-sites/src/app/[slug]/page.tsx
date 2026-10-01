@@ -15,6 +15,8 @@ import { parseJson, type HomeContent } from '@/src/lib/content';
 import { getIcon } from '@/src/lib/iconMap';
 import { getSiteImages } from '@/src/lib/images';
 import { photoAlt } from '@/src/lib/photoAlt';
+import { stockVideoLabel } from '@/src/lib/stockVideo';
+import { StockVideo } from '@/src/components/StockVideo';
 import { serviceRelatedLinks } from '@/src/lib/seoLinks';
 import { getAccessibleForeground, getTextColor, hexToRgb, resolveTheme } from '@/src/lib/theme';
 import { industryRequiresLicense } from '@/src/lib/industryClaims';
@@ -406,6 +408,11 @@ export default async function HomePage({ params }: PageProps) {
               </div>
             </div>
           </div>
+          {images.video ? (
+            <div className="mx-auto mt-14 max-w-3xl">
+              <StockVideo video={images.video} label={stockVideoLabel(images.video, site.industry)} />
+            </div>
+          ) : null}
         </div>
       </SectionWrapper>
       </div>
