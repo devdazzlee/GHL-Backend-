@@ -111,3 +111,43 @@ export async function searchStockPhotos(siteId: string, query: string): Promise<
   });
   return data.data.photos;
 }
+
+/** A Pexels clip as stored for the site (and as search results). */
+export interface StockVideoClip {
+  pexelsId: string;
+  url: string;
+  poster: string;
+  width: number;
+  height: number;
+  duration: number;
+  label: string | null;
+  credit: { videographer: string | null; videographerUrl: string | null; pageUrl: string | null };
+}
+
+export type SiteVideoState =
+  | ({ status: 'SHOWN'; source: 'AUTO' | 'PICKED' } & StockVideoClip)
+  | { status: 'REMOVED' }
+  | { status: 'NOT_PICKED_YET' };
+
+export interface SiteVideoSlot {
+  video: SiteVideoState;
+  suggestedQuery: string;
+}
+
+export async function getSiteVideo(siteId: string): Promise<SiteVideoSlot> {
+  const { data } = await api.get<Envelope<SiteVideoSlot>>(`/phase4/sites/${siteId}/video`);
+  return data.data;
+}
+
+/** Show this Pexels clip ({ pexelsId }) or no video at all ({ remove: true }). */
+export async function setSiteVideo(siteId: string, choice: { pexelsId: string } | { remove: true }): Promise<SiteVideoSlot> {
+  const { data } = await api.put<Envelope<SiteVideoSlot>>(`/phase4/sites/${siteId}/video`, choice);
+  return data.data;
+}
+
+export async function searchStockVideos(siteId: string, query: string): Promise<StockVideoClip[]> {
+  const { data } = await api.get<Envelope<{ videos: StockVideoClip[] }>>(`/phase4/sites/${siteId}/stock-videos`, {
+    params: { q: query },
+  });
+  return data.data.videos;
+}

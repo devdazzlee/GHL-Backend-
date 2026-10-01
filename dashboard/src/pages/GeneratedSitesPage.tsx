@@ -57,6 +57,7 @@ import { CustomDomainPanel } from '../components/CustomDomainPanel';
 import { OpeningHoursEditor } from '../components/OpeningHoursEditor';
 import { PageTextEditor, ServicesEditor, SiteImageSlots } from '../components/PageTextEditor';
 import { PhotoCreditsPanel } from '../components/PhotoCreditsPanel';
+import { SiteVideoPanel } from '../components/SiteVideoPanel';
 import { uploadSiteImage } from '../api/blog';
 import { KeywordPagesPanel } from '../components/KeywordPagesPanel';
 import { cn } from '../lib/utils';
@@ -1470,6 +1471,7 @@ export function GeneratedSitesPage() {
                       searchHint={selectedSite.industry}
                     />
                   ) : null}
+                  {activeTab === 'home' ? <SiteVideoPanel siteId={selectedSite.id} /> : null}
                   <PageTextEditor siteId={selectedSite.id} page={activeTab} />
                 </div>
               ) : (
