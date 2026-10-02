@@ -1260,42 +1260,25 @@ export function GeneratedSitesPage() {
       </div>
 
       <div className="flex-1">
-      {loading && sites.length === 0 ? (
+      {loading ? (
         <CardListSkeleton count={6} />
+      ) : sites.length === 0 ? (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 py-16 text-center text-sm text-slate-500">
+          {hasActiveFilters
+            ? 'No sites match your filters.'
+            : 'No generated sites yet. Sites are created via the site generation webhook.'}
+        </div>
       ) : (
-        <div className="relative min-h-[12rem]">
-          {loading ? (
-            <div
-              className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-950/70 backdrop-blur-[1px]"
-              aria-live="polite"
-              aria-busy="true"
-            >
-              <div className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-                <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
-                Loading sites…
-              </div>
-            </div>
-          ) : null}
-
-          {sites.length === 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 py-16 text-center text-sm text-slate-500">
-              {hasActiveFilters
-                ? 'No sites match your filters.'
-                : 'No generated sites yet. Sites are created via the site generation webhook.'}
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {sites.map((site) => (
-                <SiteCard
-                  key={site.id}
-                  site={site}
-                  onDetails={openDetails}
-                  onEdit={openEdit}
-                  onDelete={setDeleteTarget}
-                />
-              ))}
-            </div>
-          )}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {sites.map((site) => (
+            <SiteCard
+              key={site.id}
+              site={site}
+              onDetails={openDetails}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+            />
+          ))}
         </div>
       )}
       </div>
