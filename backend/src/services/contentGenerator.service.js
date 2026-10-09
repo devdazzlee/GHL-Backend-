@@ -1,7 +1,29 @@
+import fs from 'node:fs';
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
 import prisma from '../database/client.js';
 import { AppError } from '../utils/AppError.js';
+import { humanizePost, isHumanizerEnabled } from './humanizer.service.js';
+
+// gpt-4o-mini is enough for the draft: the AuthorMist pass (humanizer.service)
+// is what makes posts read as human, and in testing a gpt-4o-mini draft passed
+// Originality as often as a gpt-5.5 one once rewritten.
+const POST_MODEL = process.env.POST_MODEL?.trim() || 'gpt-4o-mini';
+
+// Real human-written work stories, used only as voice examples in the prompt.
+const HUMAN_VOICE_EXAMPLES = JSON.parse(
+  fs.readFileSync(new URL('../data/humanVoiceExamples.json', import.meta.url), 'utf8'),
+).examples;
+const VOICE_EXAMPLES_PER_POST = 6;
+
+function pickVoiceExamples(n) {
+  const pool = [...HUMAN_VOICE_EXAMPLES];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
 
 const DEFAULT_MAX_POST_LENGTH = 80;
 const MIN_POST_LENGTH = 50;
@@ -81,7 +103,19 @@ No emojis
 No corporate buzzwords
 Sound human not AI
 Never start with the same word as previous posts
-Make it specific to ${industry} not generic`;
+Make it specific to ${industry} not generic
+
+HOW EVERY POST MUST READ — whatever the post type, write it the way an owner would tell a friend what happened on a job:
+- Include one thing a customer actually said, in quotes, and what you said back. Even a tip, an offer or an answer should come out of a real conversation like that.
+- Include one short off-topic aside that has nothing to do with ${industry}: the parking on their street, the traffic on the drive over, the dog at the house, the weather, the coffee. Real people wander for a sentence.
+- Connect it to something else you remember: another customer, a past job, the same model or problem last year.
+- No lesson-of-the-story sentences and no advice voice: never "it's important to", "regular maintenance can", "this is why", "don't wait until", "the key is". If there's a tip, say it once, plainly, the way you'd say it out loud.
+- Do NOT end with a sales line like "Call us today for X in Y". Sign off short and plain, like "${businessName}, ${city}." or "Anyway, ${businessName} if you need us."
+- Normal grammar, contractions always, no lists or bullet points.
+- Never give a customer a name, real or made up ("the homeowner", "a couple in Lodi", "an older guy" — never "Joe").
+
+Example of the exact voice (written for an HVAC company — copy the STYLE only, never its town, customer, brand, part or wording, and write about ${businessName}'s own trade):
+"Customer in Teaneck asks me today, "is it the whole furnace?" and I'm standing there holding a part the size of a pencil. No ma'am. It's the flame sensor. Funny thing is her neighbor called us last winter for the exact same model, a Goodman from like 2011, and it was the same deal. These things just collect gunk. Took me longer to find parking on her street than to fix it honestly, Teaneck on a Tuesday is no joke. She asked how often she should get it looked at and I told her once a year, before it gets cold, not during. Anyway if your furnace lights then shuts off, that's usually your answer. 551 HVAC, Bergen County."`;
 }
 
 const DRAFT_TEMPLATES = [
@@ -662,7 +696,7 @@ function getPostTypeAngle(postTypeLabel, category, businessName, offerTerms, opt
     ].filter(Boolean).join('; ');
     return {
       angle:
-        `First, work out the SPECIFIC real-world trade or service this business actually performs. Use everything you know about it: ${knownSignals}. Do not take a vague category (like "local business" or "service") at face value — infer the real, specific service from the business name and any other signal available, the same way a person would guess what a business does from its name and details. Then write this as an educational tip or how-to post, NOT a personal story or daily-life anecdote — teach the reader something real and useful about that SPECIFIC service, not a generic tip that could apply to any small business (no generic workplace, productivity, or wellness advice unless that literally is the business's trade).${topicHint} Structure it like a quick, practical insight a real expert in that specific trade would share: state the tip clearly, then explain briefly why it matters or what to do about it.`,
+        `First, work out the SPECIFIC real-world trade or service this business actually performs. Use everything you know about it: ${knownSignals}. Do not take a vague category (like "local business" or "service") at face value — infer the real, specific service from the business name and any other signal available, the same way a person would guess what a business does from its name and details. Then write a post whose point is one useful tip, told through the real job and customer conversation where it came up — teach the reader something real and useful about that SPECIFIC service, not a generic tip that could apply to any small business (no generic workplace, productivity, or wellness advice unless that literally is the business's trade).${topicHint} Say the tip once, plainly, the way the owner would say it to that customer — not as a structured how-to.`,
       cta: '',
     };
   }
@@ -774,6 +808,58 @@ function contentIncludesBusinessName(content, businessName) {
   return content.toLowerCase().includes(name.toLowerCase());
 }
 
+// Moral-of-the-story and sales lines the draft model keeps adding despite the
+// prompt. The post AuthorMist could not rescue in one pass ended on exactly
+// these, and they read badly regardless of any detector.
+const LESSON_OR_SALES_LINE =
+  /\b(?:(?:it'?s|it is) (?:truly |really |just )?amazing how|goes to show|now is the (?:perfect|ideal|best|right) time|don'?t wait|give us a (?:call|ring|shout)|call us (?:today|now)|book (?:your|now|today)|feel free to (?:reach|call|contact)|(?:is|are|we'?re) here to help|(?:can )?make (?:all the|such a|a big) difference)\b/i;
+const MIN_WORDS_AFTER_STRIP = 50;
+
+function stripLessonAndSalesLines(draft, signOff) {
+  const body = draft.endsWith(signOff) ? draft.slice(0, -signOff.length).trim() : draft.trim();
+  const kept = body.split(/(?<=[.!?])\s+/).filter((s) => !LESSON_OR_SALES_LINE.test(s)).join(' ');
+  if (kept.split(/\s+/).length < MIN_WORDS_AFTER_STRIP) return draft;
+  return `${kept} ${signOff}`;
+}
+
+const HUMANIZE_ATTEMPTS = 3;
+// A second AuthorMist pass over its own output rescued a post Originality had
+// flagged after one pass (94% AI -> likely original). Passes cost no API spend,
+// only time: ~40-70s each on the 2-core-capped VPS service.
+const HUMANIZE_PASSES = 2;
+
+/**
+ * One AuthorMist pass over a draft that already passed every gate, re-checked
+ * because the rewriter sometimes drops or changes facts. Re-runs are free (local
+ * model), so a failed check just tries again. Returns null to keep the draft.
+ */
+async function humanizeWithChecks(draft, { businessName, city, otherBusinessNames, requiredBrand, locationId }) {
+  if (!isHumanizerEnabled()) return null;
+
+  // The town is guaranteed by the exact sign-off humanizePost appends, so the
+  // body is not required to keep it — requiring that made AuthorMist fail the
+  // check most of the time and fall back to the unrewritten draft.
+  const signOff = `${businessName}, ${city}.`;
+  const source = stripLessonAndSalesLines(draft, signOff);
+
+  for (let attempt = 1; attempt <= HUMANIZE_ATTEMPTS; attempt += 1) {
+    let rewritten = source;
+    for (let pass = 0; pass < HUMANIZE_PASSES && rewritten; pass += 1) {
+      rewritten = await humanizePost(rewritten, { businessName, city });
+    }
+    if (!rewritten) return null;
+
+    const body = rewritten.slice(0, -signOff.length);
+    const problems = [];
+    if (contentMentionsOtherBusiness(rewritten, businessName, otherBusinessNames)) problems.push('other business named');
+    if (requiredBrand && !findMentionedBrand(body, [requiredBrand])) problems.push(`lost brand ${requiredBrand}`);
+    if (problems.length === 0) return rewritten;
+
+    console.warn(JSON.stringify({ event: 'humanizer_check_failed', locationId, attempt, problems }));
+  }
+  return null;
+}
+
 /**
  * @param {string} locationId - DB location id (used for recent-post context)
  * @param {string} businessName - exact business name that must appear in the post
@@ -883,26 +969,25 @@ export async function generatePostContent(
   const competitorTopic = competitorIdea.topic;
   const competitorInstruction = `\nPost topic inspiration from a top ranked business in this industry (${competitorIdea.competitor}, found at ${competitorIdea.sourceUrl}): ${competitorTopic}. Use this as inspiration but make the post specific to ${name} and ${locationCity}. Do not copy this topic directly, adapt it to feel authentic to this business.\n`;
 
-  const keywordStyle = variationSeed % 2 === 0 ? 'local' : 'service';
-  const keywordStyleInstruction =
-    keywordStyle === 'local'
-      ? `Naturally include a local keyword phrase such as "${primaryKeyword} ${locationCity}" or "${primaryKeyword} in ${locationCity}" somewhere in the post.`
-      : `Naturally include a service or brand style keyword phrase such as "certified ${categoryLabel} specialist" or "professional ${primaryKeyword} service" somewhere in the post.`;
+  // No marketing keyword phrases ("certified X specialist", "X in <town>"):
+  // they were the clearest difference between posts Originality flagged and
+  // the ones it passed. Name the actual job in plain words instead.
+  const keywordStyleInstruction = `Say what the actual work was in plain words (like "${primaryKeyword}" or the specific part you fixed). Never use marketing phrases like "certified ${categoryLabel} specialist", "professional ${primaryKeyword} service" or "${primaryKeyword} in ${locationCity}". No booking or sales sentence.`;
 
   const toneInstruction = isQandA
-    ? 'Write like the owner answering a question a customer just asked, direct and helpful — NOT a personal anecdote or story about today'
+    ? 'Write like the owner retelling a question a real customer asked on a job, and what they told them'
     : isInformational
-      ? 'Write like a knowledgeable business owner sharing a genuinely useful tip — NOT a personal anecdote or story about today'
+      ? 'Write like the owner passing on a tip that came up on a real job, in the conversation with that customer'
       : isPromotional
-        ? 'Write with confident, inviting energy promoting a specific service or offer — NOT a personal anecdote or story about today'
+        ? 'Write like the owner mentioning the service or offer because of a real job or customer conversation, not like an ad'
         : 'First person casual tone like a real business owner texting a neighbor';
 
   const structureInstruction = isQandA
     ? 'Lead with the customer question, then answer it fully and plainly so someone searching that question gets a complete answer'
     : isInformational
-      ? 'Teach something specific and useful — a clear tip, then why it matters or what to do about it'
+      ? 'One specific, useful tip, said plainly inside the story of the job'
       : isPromotional
-        ? 'Highlight the specific service or offer clearly, create gentle urgency, and end with a direct call to action'
+        ? 'Mention the specific service or offer clearly, tied to the real job where it came up — no sales line at the end'
         : 'Feel like a different moment and situation every time';
 
   const repeatAvoidanceInstruction = isQandA
@@ -934,7 +1019,10 @@ ${competitorInstruction}${brandInstruction}
 ${previousOpeningWord ? `\nHARD RULE: The most recent post started with the word "${previousOpeningWord}". Your post must NOT start with "${previousOpeningWord}" or any close variant of it — pick a completely different opening word.\n` : ''}
 Local SEO requirement: ${keywordStyleInstruction}
 
-Call to action requirement: End the post with a call to action that matches this meaning: "${cta}" (you may rephrase it slightly but keep the same intent and keep it at the very end).
+Real posts written by people about their own jobs. Match this kind of voice, never copy their content:
+${pickVoiceExamples(VOICE_EXAMPLES_PER_POST).map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+Ending: end on what actually happened, never on a lesson or moral ("it's amazing how...", "goes to show..."). Then sign off short and plain with the business name, like "${name}, ${locationCity}." — do NOT write a sales sentence such as "Call us today for ...".
 
 Rules:
 - ${toneInstruction}
@@ -942,7 +1030,7 @@ Rules:
 - ${structureInstruction}
 - Under ${maxWords} words
 - Mention ${name} naturally once
-- Include the local keyword and the call to action naturally, never like an ad
+- Include the local keyword naturally, never like an ad
 - Sound human not AI
 - Current day: ${currentDayOfWeek}, Current month: ${currentMonth}
 - ${seasonalContext}
@@ -973,9 +1061,12 @@ Be creative. Surprise me with a fresh angle every single time.`;
     let cleaned;
     try {
       const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.8,
-        max_tokens: Math.min(1000, Math.max(200, Math.round(maxWords * 2.2))),
+        model: POST_MODEL,
+        // gpt-5 family are reasoning models: fixed temperature, and their
+        // token budget also covers hidden reasoning, so it needs headroom.
+        ...(POST_MODEL.startsWith('gpt-5')
+          ? { max_completion_tokens: 4000 }
+          : { temperature: 0.8, max_tokens: Math.min(1000, Math.max(200, Math.round(maxWords * 2.2))) }),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `${userPrompt}${retryNudge}` },
@@ -1050,6 +1141,14 @@ Be creative. Surprise me with a fresh angle every single time.`;
       continue;
     }
 
+    const humanized = await humanizeWithChecks(cleaned, {
+      businessName: name,
+      city: locationCity,
+      otherBusinessNames,
+      requiredBrand: brandFound,
+      locationId,
+    });
+
     console.info(
       JSON.stringify({
         event: 'openai_post_generated',
@@ -1062,6 +1161,7 @@ Be creative. Surprise me with a fresh angle every single time.`;
         brandMentioned: brandFound,
         qandaQuestion,
         attempts: attempt,
+        humanized: Boolean(humanized),
         competitorTopic,
         competitorName: competitorIdea.competitor,
         competitorSourceUrl: competitorIdea.sourceUrl,
@@ -1069,7 +1169,7 @@ Be creative. Surprise me with a fresh angle every single time.`;
       }),
     );
 
-    return cleaned;
+    return humanized ?? cleaned;
   }
 
   // Every attempt was rejected. A brand-flagged post must never be published

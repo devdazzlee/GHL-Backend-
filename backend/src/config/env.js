@@ -67,6 +67,10 @@ export const env = {
   /** Gmail app passwords may include spaces in .env — stripped when used */
   SMTP_PASS: String(process.env.SMTP_PASS ?? '').replace(/\s/g, ''),
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',
+  /** llama.cpp server running the AuthorMist rewriter. Unset = posts are not rewritten. */
+  AUTHORMIST_URL: process.env.AUTHORMIST_URL?.trim().replace(/\/$/, '') || '',
+  /** Sent as X-Authormist-Key; the relay rejects requests without it. Not needed for a local server. */
+  AUTHORMIST_KEY: process.env.AUTHORMIST_KEY?.trim() || '',
   PEXELS_API_KEY: process.env.PEXELS_API_KEY ?? '',
   SITE_FRONTEND_URL: process.env.SITE_FRONTEND_URL?.trim() || PRODUCTION_SITE_FRONTEND_URL,
   /** Custom domains are verified by checking their DNS points at this IP. */
