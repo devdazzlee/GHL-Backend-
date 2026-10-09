@@ -48,6 +48,13 @@ async function safeCreateAuditLog(data) {
   }
 }
 
+function isRealOffer(postTypeLabel, loc) {
+  const hasOfferDetails = [loc.offerCouponCode, loc.offerTerms, loc.offerRedeemUrl].some(
+    (v) => String(v ?? '').trim(),
+  );
+  return postTypeLabel === 'PROMOTIONAL' && hasOfferDetails;
+}
+
 /**
  * Publish with retries only when the post row was not created (transient DB errors).
  */
@@ -222,12 +229,14 @@ export async function runDailyPostPublisher(options = {}) {
       weekday: 'long',
       timeZone: schedule.timezone || 'America/New_York',
     }).format(new Date());
-    const { scheduleType, publishType } = getPostTypeForScheduledDay(schedule, weekday);
+    const { scheduleType, publishType: scheduledPublishType } = getPostTypeForScheduledDay(schedule, weekday);
+    let publishType = scheduledPublishType;
 
     try {
       // Inside the try: content generation now fails hard when competitor
       // research or a required brand mention cannot be satisfied, and that must
       // stop this location only — not abort the run for every other location.
+      const contentMeta = {};
       const content = await generatePostContent(
         locationId,
         businessName,
@@ -236,7 +245,23 @@ export async function runDailyPostPublisher(options = {}) {
         scheduleType,
         dayOfYear,
         loc.maxPostLength,
+        contentMeta,
       );
+
+      // An OFFER post shows the saved coupon and terms next to the text. Only use
+      // it when the text was written as a promotion and the business has offer
+      // details; otherwise it would be an "offer" with no offer in it.
+      if (publishType === 'OFFER' && !isRealOffer(contentMeta.postTypeLabel, loc)) {
+        publishType = 'UPDATE';
+        console.info(
+          JSON.stringify({
+            event: 'daily_post_offer_published_as_update',
+            locationId: loc.id,
+            businessName,
+            postTypeLabel: contentMeta.postTypeLabel,
+          }),
+        );
+      }
 
       const mediaUrl = await resolveDailyPostMediaUrl(
         locationId,

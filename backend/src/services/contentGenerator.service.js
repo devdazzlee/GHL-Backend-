@@ -869,6 +869,8 @@ async function humanizeWithChecks(draft, { businessName, city, otherBusinessName
 /**
  * @param {string} locationId - DB location id (used for recent-post context)
  * @param {string} businessName - exact business name that must appear in the post
+ * @param {{ postTypeLabel?: string }} [meta] - filled in with the kind of post written
+ *   (INFORMATIONAL / PROMOTIONAL / STORY / QANDA), so the caller can pick the Google post type
  */
 export async function generatePostContent(
   locationId,
@@ -878,6 +880,7 @@ export async function generatePostContent(
   postType,
   dayOfYear,
   maxPostLength = DEFAULT_MAX_POST_LENGTH,
+  meta = {},
 ) {
   const apiKey = env.OPENAI_API_KEY?.trim();
   const maxWords = resolveMaxWords(maxPostLength);
@@ -928,6 +931,7 @@ export async function generatePostContent(
 
   const seed = Math.floor(Math.random() * 1000);
   const postTypeLabel = getRotatedPostType(dayOfYear, seed);
+  meta.postTypeLabel = postTypeLabel;
   const isInformational = postTypeLabel === 'INFORMATIONAL';
   const isPromotional = postTypeLabel === 'PROMOTIONAL';
   const isQandA = postTypeLabel === 'QANDA';
