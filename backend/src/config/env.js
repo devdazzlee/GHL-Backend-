@@ -44,6 +44,8 @@ export function parseCorsOrigins(source = process.env) {
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
+  /** "off" skips every cron job (posting, social status, blog). For local servers on the production DB. */
+  SCHEDULED_JOBS: process.env.SCHEDULED_JOBS?.trim().toLowerCase() || 'on',
   PORT: Number(process.env.PORT) || 4000,
   MOCK_MODE: truthyEnv('MOCK_MODE'),
   /** Automatic blog posts run unless this is "false" (set it on local machines that share a database). */

@@ -827,6 +827,7 @@ const HUMANIZE_ATTEMPTS = 3;
 // flagged after one pass (94% AI -> likely original). Passes cost no API spend,
 // only time: ~40-70s each on the 2-core-capped VPS service.
 const HUMANIZE_PASSES = 2;
+const HUMANIZE_RETRY_DELAY_MS = 30_000;
 
 /**
  * One AuthorMist pass over a draft that already passed every gate, re-checked
@@ -847,7 +848,12 @@ async function humanizeWithChecks(draft, { businessName, city, otherBusinessName
     for (let pass = 0; pass < HUMANIZE_PASSES && rewritten; pass += 1) {
       rewritten = await humanizePost(rewritten, { businessName, city });
     }
-    if (!rewritten) return null;
+    if (!rewritten) {
+      // AuthorMist down or returned junk: wait (30s, then 60s) and try again.
+      console.warn(JSON.stringify({ event: 'humanizer_unavailable', locationId, attempt }));
+      if (attempt < HUMANIZE_ATTEMPTS) await new Promise((r) => setTimeout(r, HUMANIZE_RETRY_DELAY_MS * attempt));
+      continue;
+    }
 
     const body = rewritten.slice(0, -signOff.length);
     const problems = [];
@@ -1169,18 +1175,30 @@ Be creative. Surprise me with a fresh angle every single time.`;
       }),
     );
 
-    return humanized ?? cleaned;
+    if (humanized) return humanized;
+    if (!isHumanizerEnabled()) return cleaned;
+
+    // The unrewritten draft scores as AI, so it is never published. Throwing
+    // makes the daily publisher skip this location today (and send an alert).
+    throw new AppError(
+      `Post generation failed for ${name}: AuthorMist could not produce a rewrite that passed the checks after ${HUMANIZE_ATTEMPTS} tries. Nothing was published today.`,
+      502,
+      { code: 'POST_HUMANIZE_FAILED', details: { businessName: name, locationId, postCount } },
+    );
   }
 
   // Every attempt was rejected. A brand-flagged post must never be published
   // without its brand, so fail loudly with the full attempt history rather than
   // returning the canned draft (which contains no brand either).
-  if (shouldMentionBrand) {
+  // The canned draft is not rewritten either, so with AuthorMist on it is skipped too.
+  if (shouldMentionBrand || isHumanizerEnabled()) {
     throw new AppError(
-      `Post generation failed for ${name}: ${MAX_GENERATION_ATTEMPTS} attempts could not produce the required brand mention. Nothing was published.`,
+      shouldMentionBrand
+        ? `Post generation failed for ${name}: ${MAX_GENERATION_ATTEMPTS} attempts could not produce the required brand mention. Nothing was published.`
+        : `Post generation failed for ${name}: all ${MAX_GENERATION_ATTEMPTS} attempts were rejected, and the canned draft is skipped while AuthorMist is on. Nothing was published.`,
       502,
       {
-        code: 'POST_BRAND_MENTION_FAILED',
+        code: shouldMentionBrand ? 'POST_BRAND_MENTION_FAILED' : 'POST_GENERATION_FAILED',
         details: {
           businessName: name,
           locationId,
